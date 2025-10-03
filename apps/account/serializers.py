@@ -77,7 +77,7 @@ class ForgotPasswordOTPRequestSerializer(serializers.Serializer):
 
 class ForgotPasswordOTPVerifySerializer(serializers.Serializer):
     phone = serializers.CharField()
-    otp = serializers.CharField(max_length=4)
+    otp = serializers.CharField(max_length=5)
 
 class ForgotPasswordResetSerializer(serializers.Serializer):
     phone = serializers.CharField()
