@@ -1,57 +1,104 @@
 from django.db import models
-from apps.account.models import CustomUser  
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from apps.account.models import UserProfile  
+
+STATUS_CHOICES = (
+    ('public', 'Public'),
+    ('private', 'Private'),
+    ('friends', 'Friends'),
+)
 
 class Feed(models.Model):
-    profile = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='feeds')
     content = models.TextField()
-    # timesince = models.DateTimeField(auto_now_add=True)
-    total_like = models.IntegerField(default=0)
-    total_unlike = models.IntegerField(default=0)
-    total_comment = models.IntegerField(default=0)
-    status = models.CharField(max_length=20)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='public')
+    total_like = models.PositiveIntegerField(default=0)
+    total_unlike = models.PositiveIntegerField(default=0)
+    total_comment = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-class FeedFile(models.Model):
-    feed = models.ForeignKey(Feed, on_delete=models.CASCADE)
-    file = models.FileField(upload_to='feed_files/')
+    def __str__(self):
+        return f"{self.profile} - {self.content[:30]}"
 
-class FeedVideo(models.Model):
-    profile = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
-    file = models.FileField(upload_to='feed_videos/')
-    title = models.CharField(max_length=255)
-    description = models.TextField()
-    total_like = models.IntegerField(default=0)
-    total_unlike = models.IntegerField(default=0)
-    total_comment = models.IntegerField(default=0)
-    total_view = models.IntegerField(default=0)
-    total_earn = models.IntegerField(default=0)
+
+class FeedFile(models.Model):
+    feed = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name='files')
+    file = models.FileField(upload_to='feed/files/')
     created_at = models.DateTimeField(auto_now_add=True)
 
+
+class FeedVideo(models.Model):
+    profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='videos')
+    file = models.FileField(upload_to='feed/videos/')
+    title = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    total_like = models.PositiveIntegerField(default=0)
+    total_unlike = models.PositiveIntegerField(default=0)
+    total_comment = models.PositiveIntegerField(default=0)
+    total_view = models.PositiveIntegerField(default=0)
+    total_earn = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Comment(models.Model):
-    content_type_id = models.IntegerField()
-    comment_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    comment_by = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 class Like(models.Model):
-    content_type_id = models.IntegerField()
-    liked_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,null=True,blank=True)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    liked_by = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Unlike(models.Model):
-    content_type_id = models.IntegerField()
-    unliked_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE,null=True,blank=True)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
+    unliked_by = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Story(models.Model):
-    profile = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='stories')
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 class StoryItem(models.Model):
-    story = models.ForeignKey(Story, on_delete=models.CASCADE)
-    file = models.FileField(upload_to='story_items/')
-    created_at = models.DateTimeField(auto_now_add=True)
-    expired_at = models.DateTimeField()
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name='items')
+    file = models.FileField(upload_to='stories/')
+    expired_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
-    total_view = models.IntegerField(default=0)
+    total_view = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CreatorProfile(models.Model):
+    profile = models.OneToOneField(UserProfile, on_delete=models.CASCADE)
+    start_date = models.DateField(auto_now_add=True)
+    status = models.CharField(max_length=50, default='active')
+
+
+class TopFan(models.Model):
+    iam = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='topfans')
+    fan_profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name='fan_of')
+    status = models.CharField(max_length=50, default='active')
+
+
+class Transaction(models.Model):
+    TYPE_CHOICES = (
+        ('tip', 'Tip'),
+        ('gift', 'Gift'),
+    )
+    profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
