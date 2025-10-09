@@ -56,7 +56,7 @@ class LoginSerializer(serializers.Serializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    full_name = serializers.CharField(source='user.name')
+    full_name = serializers.CharField(source='user.name', required=False)
     is_active = serializers.BooleanField(source='user.is_active', read_only=True)
 
     class Meta:
@@ -75,6 +75,20 @@ class ProfileSerializer(serializers.ModelSerializer):
             'is_creator',
             'is_active',
         ]
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop('user', None)
+
+        if user_data and 'name' in user_data:
+            instance.user.name = user_data['name']
+            instance.user.save()
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
+
 
 
 class ForgotPasswordOTPRequestSerializer(serializers.Serializer):
