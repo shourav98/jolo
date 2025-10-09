@@ -2,6 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from datetime import timedelta
 from .managers import CustomUserManager
 
 
@@ -20,7 +21,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     def __str__(self):
-        return self.phone
+        return f"{self.name} ({self.phone})"
 
 
 class OTPVerification(models.Model):
@@ -32,9 +33,14 @@ class OTPVerification(models.Model):
     otp = models.CharField(max_length=4)
     purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_used = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.user.phone} - {self.purpose} - {self.otp}"
+
+    def is_expired(self):
+        """Check if OTP expired (valid for 5 minutes)"""
+        return timezone.now() > self.created_at + timedelta(minutes=5)
 
 
 class UserProfile(models.Model):
@@ -57,7 +63,7 @@ class UserProfile(models.Model):
     country = models.CharField(max_length=100, blank=True, null=True)
 
     bio = models.TextField(blank=True, null=True)
-    first_line = models.CharField(max_length=255, blank=True, null=True)
+    flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
 
     def __str__(self):

@@ -2,10 +2,11 @@ from rest_framework import serializers
 from .models import CustomUser, UserProfile, OTPVerification
 from django.contrib.auth import authenticate
 
+
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
-    # profile_photo = serializers.ImageField(required=False)
+
     gender = serializers.CharField(required=False)
     date_of_birth = serializers.DateField(required=False)
     street_address = serializers.CharField(required=False)
@@ -27,15 +28,18 @@ class SignupSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        profile_fields = ['profile_photo', 'gender', 'date_of_birth', 'street_address', 'zip_code', 'city', 'country']
-        user_data = {k: validated_data[k] for k in ['phone', 'name', 'password']}
-        validated_data.pop('confirm_password')
+        profile_fields = ['gender', 'date_of_birth', 'street_address', 'zip_code', 'city', 'country']
+        user_data = {k: validated_data[k] for k in ['phone', 'name', 'password'] if k in validated_data}
+        validated_data.pop('confirm_password', None)
+
         user = CustomUser.objects.create_user(**user_data)
-        user.is_active = True 
+        user.is_active = True
         user.save()
+
         profile_data = {k: validated_data.get(k) for k in profile_fields}
         UserProfile.objects.create(user=user, **profile_data)
         return user
+
 
 class LoginSerializer(serializers.Serializer):
     phone = serializers.CharField()
@@ -67,17 +71,20 @@ class ProfileSerializer(serializers.ModelSerializer):
             'city',
             'country',
             'bio',
-            'first_line',
+            'flirt_line',
             'is_creator',
             'is_active',
         ]
 
+
 class ForgotPasswordOTPRequestSerializer(serializers.Serializer):
     phone = serializers.CharField()
+
 
 class ForgotPasswordOTPVerifySerializer(serializers.Serializer):
     phone = serializers.CharField()
     otp = serializers.CharField(max_length=5)
+
 
 class ForgotPasswordResetSerializer(serializers.Serializer):
     phone = serializers.CharField()
