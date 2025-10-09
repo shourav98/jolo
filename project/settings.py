@@ -38,17 +38,19 @@ INSTALLED_APPS = [
     # 3rd party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    # 'django.contrib.contenttypes'
     # 'corsheaders',
 
     # Local apps
     'apps.account',
-    'apps.feed',
+    'apps.feed.apps.FeedConfig',
+
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    # 'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -80,8 +82,15 @@ WSGI_APPLICATION = 'project.wsgi.application'
 ###################################
 #   DATABASE
 ###################################
-from .conf import database
-DATABASES = database.SQLITE
+# from .conf import database
+# DATABASES = database.SQLITE
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
 ###################################
 #   PASSWORD VALIDATION
