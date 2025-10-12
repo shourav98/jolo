@@ -5,11 +5,14 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import F
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
 from django.db import transaction as db_transaction
 from .models import (
     UserProfile, Feed, FeedFile, FeedVideo,
     Comment, Like, Unlike, Story, StoryItem,
-    CreatorProfile, TopFan, Transaction
+    CreatorProfile, TopFan, Transaction,
+    Announcement
 )
 from .serializers import (
     FeedSerializer, FeedCreateSerializer, FeedVideoSerializer,
@@ -251,3 +254,18 @@ class CreatorProfileDetailAPIView(APIView):
             return Response({'status': 404, 'message': 'Not a creator'}, status=status.HTTP_404_NOT_FOUND)
         serializer = CreatorProfileSerializer(creator)
         return Response({'status': 200, 'data': serializer.data})
+
+
+class AnnouncementListView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        ann = Announcement.objects.all().order_by('-created_at')
+        return Response([{
+            "title": a.title,
+            "content": a.content,
+            "image": request.build_absolute_uri(a.image.url) if a.image else None,
+            "video": request.build_absolute_uri(a.video.url) if a.video else None,
+            "is_featured": a.is_featured,
+            "created_at": a.created_at,
+        } for a in ann])

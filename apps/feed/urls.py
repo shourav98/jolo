@@ -5,13 +5,14 @@ from .views import (
     FeedVideoListCreateAPIView, FeedVideoDetailAPIView, IncrementVideoViewAPIView,
     StoryListCreateAPIView,
     TopFanListCreateAPIView, TipTransactionAPIView,
-    CreatorProfileDetailAPIView
+    CreatorProfileDetailAPIView, AnnouncementListView
 )
 
 urlpatterns = [
     # Feeds
     path('feeds/', FeedListCreateAPIView.as_view(), name='feed-list-create'),
     path('feeds/<int:feed_id>/', FeedDetailAPIView.as_view(), name='feed-detail'),
+    path("announcements/", AnnouncementListView.as_view()),
 
     # Comments (generic for feed/video)
     path('comments/<str:content_type_name>/<int:object_id>/', CommentListCreateAPIView.as_view(), name='comments'),
