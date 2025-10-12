@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     # Local apps
     'apps.account',
     'apps.feed.apps.FeedConfig',
+    'apps.monetization'
 
 ]
 

@@ -1,18 +1,11 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.conf import settings
-# from .models import Profile
+from .models import CustomUser
+from apps.monetization.models import Wallet, CreatorProfile, CreatorMonetization
 
-
-'''
-@receiver(post_save, sender=settings.AUTH_USER_MODEL)
-def create_or_update_user_profile(sender, instance, created, **kwargs):
-    """
-    Automatically create or update profile
-    when the user is saved.
-    """
+@receiver(post_save, sender=CustomUser)
+def create_related_records(sender, instance, created, **kwargs):
     if created:
-        Profile.objects.create(user=instance)
-    else:
-        instance.profile.save()
-'''
+        Wallet.objects.get_or_create(user=instance)
+        CreatorMonetization.objects.get_or_create(user=instance)  # non_monetized by default
+        CreatorProfile.objects.get_or_create(user=instance)
