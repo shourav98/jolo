@@ -1,38 +1,30 @@
 from django.urls import path
-from .views import (
-    FeedListCreateAPIView, FeedDetailAPIView,
-    CommentListCreateAPIView, ToggleLikeAPIView, ToggleUnlikeAPIView,
-    FeedVideoListCreateAPIView, FeedVideoDetailAPIView, IncrementVideoViewAPIView,
-    StoryListCreateAPIView,
-    TopFanListCreateAPIView, TipTransactionAPIView,
-    CreatorProfileDetailAPIView, AnnouncementListView
-)
+from apps.feed import views
+
 
 urlpatterns = [
-    # Feeds
-    path('feeds/', FeedListCreateAPIView.as_view(), name='feed-list-create'),
-    path('feeds/<int:feed_id>/', FeedDetailAPIView.as_view(), name='feed-detail'),
-    path("announcements/", AnnouncementListView.as_view()),
+    #  POST CRUD
+    path('posts/', views.FeedListCreateView.as_view(), name='feed-list-create'),
+    path('posts/<int:pk>/', views.FeedListCreateView.as_view(), name='feed-detail'),
 
-    # Comments (generic for feed/video)
-    path('comments/<str:content_type_name>/<int:object_id>/', CommentListCreateAPIView.as_view(), name='comments'),
+    # COMMENTS CRUD
+    path('comments/', views.CommentListCreateView.as_view(), name='comment-list-create'),
+    path('comments/<int:pk>/', views.CommentListCreateView.as_view(), name='comment-detail'),
 
-    # Like / Unlike
-    path('like/<str:content_type_name>/<int:object_id>/', ToggleLikeAPIView.as_view(), name='like'),
-    path('unlike/<str:content_type_name>/<int:object_id>/', ToggleUnlikeAPIView.as_view(), name='unlike'),
+    # 👍 LIKE / 👎 UNLIKE
+    path('likes/', views.LikeListCreateView.as_view(), name='like-list-create'),
+    path('unlikes/', views.UnlikeListCreateView.as_view(), name='unlike-list-create'),
 
-    # Videos
-    path('videos/', FeedVideoListCreateAPIView.as_view(), name='video-list-create'),
-    path('videos/<int:video_id>/', FeedVideoDetailAPIView.as_view(), name='video-detail'),
-    path('videos/<int:video_id>/view/', IncrementVideoViewAPIView.as_view(), name='video-view'),
+    # STORIES
+    path('stories/', views.StoryListCreateView.as_view(), name='story-list-create'),
+    path('stories/<int:pk>/', views.StoryListCreateView.as_view(), name='story-detail'),
 
-    # Stories
-    path('stories/', StoryListCreateAPIView.as_view(), name='story-list-create'),
+    # 👥 FOLLOW / UNFOLLOW
+    path('follow/<int:user_id>/', views.FollowListCreateView.as_view(), name='follow-toggle'),
 
-    # TopFan & Tip
-    path('topfans/', TopFanListCreateAPIView.as_view(), name='topfan-list-create'),
-    path('transactions/tip/', TipTransactionAPIView.as_view(), name='tip'),
+    # TIP / TRANSACTION
+    path('transactions/', views.TipTransactionView.as_view(), name='tip-transaction'),
 
-    # Creator
-    path('creator/<int:profile_id>/', CreatorProfileDetailAPIView.as_view(), name='creator-detail'),
+    # TOPFANS (Leaderboard)
+    path('topfans/<int:creator_id>/', views.TopFanListView.as_view(), name='topfans-list'),
 ]
