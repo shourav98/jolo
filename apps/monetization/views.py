@@ -1,7 +1,7 @@
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import CreatorMonetization, Wallet, CoinPackage, CoinPurchase, MonetizationStatus
 
 class MonetizationApply(APIView):
@@ -43,7 +43,7 @@ class VaultView(APIView):
         })
 
 class PackageList(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     def get(self, request):
         packs = CoinPackage.objects.all().order_by("coins")
         return Response([{

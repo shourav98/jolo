@@ -10,10 +10,7 @@ def can_earn(user) -> bool:
 
 @transaction.atomic
 def spend_coins(fan, creator, service: str, coins: int):
-    """
-    ফ্যান কয়েন খরচ করলে — Vault থেকে deduct, split হিসাব, SpendEvent রেকর্ড।
-    Only allowed যদি creator monetization ACTIVE থাকে।
-    """
+    
     if not can_earn(creator):
         raise PermissionError("Creator not yet monetized or approved.")
 
