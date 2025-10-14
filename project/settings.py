@@ -12,7 +12,7 @@ SECRET_KEY = 'kcponinneq@v3g95g^#@r0-i6zz^sdu&2=p2glm@1u(^hv7ky5'
 
 DEBUG = True   # ⚠️ Production e False korte hobe
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['*']
 
 ###################################
 #   APPLICATIONS
