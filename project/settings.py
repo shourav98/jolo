@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'apps.feed.apps.FeedConfig',
     'apps.messaging',
 
+    'apps.monetization'
 ]
 
 MIDDLEWARE = [
