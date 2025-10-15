@@ -38,12 +38,14 @@ INSTALLED_APPS = [
     # 3rd party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'channels',
     # 'django.contrib.contenttypes'
     # 'corsheaders',
 
     # Local apps
     'apps.account',
     'apps.feed.apps.FeedConfig',
+    'apps.messaging',
 
 ]
 
@@ -77,7 +79,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'project.wsgi.application'
-# ASGI_APPLICATION = 'project.asgi.application'
+ASGI_APPLICATION = 'project.asgi.application'
+
+
+# Redis backend for channel layers
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # or your Redis host
+        },
+    },
+}
 
 ###################################
 #   DATABASE

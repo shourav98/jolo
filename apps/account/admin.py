@@ -3,6 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from .models import CustomUser, UserProfile
 from django.forms import TextInput, Textarea
 from django import forms
+from unfold.admin import ModelAdmin
 
 class CustomUserCreationForm(forms.ModelForm):
     class Meta:
@@ -14,7 +15,8 @@ class CustomUserChangeForm(forms.ModelForm):
         model = CustomUser
         fields = ('phone', 'name', 'is_active', 'is_staff', 'is_superuser')
 
-class CustomUserAdmin(UserAdmin):
+@admin.register(CustomUser)
+class CustomUserAdmin(ModelAdmin):
     model = CustomUser
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
@@ -39,5 +41,4 @@ class CustomUserAdmin(UserAdmin):
         ),
     )
 
-admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(UserProfile)
