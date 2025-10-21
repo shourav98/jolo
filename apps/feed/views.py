@@ -1,253 +1,315 @@
+from django.shortcuts import get_object_or_404
+from django.db import transaction, models
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.shortcuts import get_object_or_404
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import F
-from django.db import transaction as db_transaction
-from .models import (
-    UserProfile, Feed, FeedFile, FeedVideo,
-    Comment, Like, Unlike, Story, StoryItem,
-    CreatorProfile, TopFan, Transaction
+
+from apps.feed.models import (
+    Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
 )
-from .serializers import (
-    FeedSerializer, FeedCreateSerializer, FeedVideoSerializer,
-    CommentSerializer, SimpleCommentCreateSerializer,
-    LikeSerializer, UnlikeSerializer,
-    StorySerializer, StoryItemSerializer,
-    TopFanSerializer, TransactionSerializer, CreatorProfileSerializer, ProfileSerializer
+from apps.feed.serializers import (
+    FeedSerializer, CommentSerializer, TopFanSerializer
 )
+from apps.account.models import UserProfile
+from apps.monetization.services import spend_coins
 
 
-# ---------------- Utilities ----------------
-def get_profile_from_request(user):
-    # tries to get related Profile; adapt if your relation differs
-    profile = getattr(user, 'profile', None)
-    if profile:
-        return profile
-    return UserProfile.objects.get(user=user)
 
+# FEED CRUD (Create, List, Update, Delete)
 
-# ---------------- Feeds ----------------
-class FeedListCreateAPIView(APIView):
+class FeedListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        feeds = Feed.objects.select_related('profile').prefetch_related('files').order_by('-created_at')
-        serializer = FeedSerializer(feeds, many=True)
-        return Response({'status': 200, 'data': serializer.data})
+        
+        user = request.user
+        if not user.is_authenticated:
+            feeds = Feed.objects.filter(status="public").order_by("-created_at")
+        else:
+            profile = user.profile
+            following_profiles = profile.following.values("following")
+            feeds = Feed.objects.filter(
+                models.Q(status="public")
+                | models.Q(profile=profile)
+                | models.Q(status="friends", profile__in=following_profiles)
+            ).distinct().order_by("-created_at")
+
+        serializer = FeedSerializer(feeds, many=True, context={"request": request})
+        return Response(serializer.data)
 
     def post(self, request):
-        serializer = FeedCreateSerializer(data=request.data, context={'request': request})
+        
+        serializer = FeedSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
-            feed = serializer.save()
-            return Response({'status': 201, 'data': FeedSerializer(feed).data}, status=status.HTTP_201_CREATED)
-        return Response({'status': 400, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class FeedDetailAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, feed_id):
-        feed = get_object_or_404(Feed, pk=feed_id)
-        serializer = FeedSerializer(feed)
-        return Response({'status': 200, 'data': serializer.data})
-
-
-# ---------------- Feed Comments ----------------
-class CommentListCreateAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-    def get_object_and_ctype(self, content_type_name, object_id):
-        model = Feed if content_type_name == 'feed' else FeedVideo
-        obj = get_object_or_404(model, pk=object_id)
-        ctype = ContentType.objects.get_for_model(model)
-        return obj, ctype
-
-    def get(self, request, content_type_name, object_id):
-        obj, ctype = self.get_object_and_ctype(content_type_name, object_id)
-        comments = Comment.objects.filter(content_type=ctype, object_id=obj.id).select_related('comment_by')
-        serializer = CommentSerializer(comments, many=True)
-        return Response({'status': 200, 'data': serializer.data})
-
-    def post(self, request, content_type_name, object_id):
-        obj, ctype = self.get_object_and_ctype(content_type_name, object_id)
-        serializer = SimpleCommentCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            profile = get_profile_from_request(request.user)
-            Comment.objects.create(
-                content_type=ctype,
-                object_id=obj.id,
-                comment_by=profile,
-                content=serializer.validated_data['content']
+            feed = serializer.save(profile=request.user.profile)
+            files = request.FILES.getlist("files")
+            for f in files:
+                FeedFile.objects.create(feed=feed, file=f)
+            return Response(
+                FeedSerializer(feed, context={"request": request}).data,
+                status=status.HTTP_201_CREATED,
             )
-            # increment counter atomically
-            model_cls = obj.__class__
-            model_cls.objects.filter(pk=obj.pk).update(total_comment=F('total_comment') + 1)
-            return Response({'status': 201, 'message': 'Comment added'}, status=status.HTTP_201_CREATED)
-        return Response({'status': 400, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ---------------- Like / Unlike ----------------
-class ToggleLikeAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, content_type_name, object_id):
-        model = Feed if content_type_name == 'feed' else FeedVideo
-        obj = get_object_or_404(model, pk=object_id)
-        ctype = ContentType.objects.get_for_model(model)
-        profile = get_profile_from_request(request.user)
-
-        exists = Like.objects.filter(content_type=ctype, object_id=obj.id, liked_by=profile)
-        if exists.exists():
-            exists.delete()
-            model.objects.filter(pk=obj.pk).update(total_like=F('total_like') - 1)
-            return Response({'status': 200, 'liked': False})
-        else:
-            # remove unlike if present
-            Unlike.objects.filter(content_type=ctype, object_id=obj.id, unliked_by=profile).delete()
-            Like.objects.create(content_type=ctype, object_id=obj.id, liked_by=profile)
-            model.objects.filter(pk=obj.pk).update(total_like=F('total_like') + 1)
-            return Response({'status': 201, 'liked': True})
-
-
-class ToggleUnlikeAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, content_type_name, object_id):
-        model = Feed if content_type_name == 'feed' else FeedVideo
-        obj = get_object_or_404(model, pk=object_id)
-        ctype = ContentType.objects.get_for_model(model)
-        profile = get_profile_from_request(request.user)
-
-        exists = Unlike.objects.filter(content_type=ctype, object_id=obj.id, unliked_by=profile)
-        if exists.exists():
-            exists.delete()
-            model.objects.filter(pk=obj.pk).update(total_unlike=F('total_unlike') - 1)
-            return Response({'status': 200, 'unliked': False})
-        else:
-            # remove like if present
-            Like.objects.filter(content_type=ctype, object_id=obj.id, liked_by=profile).delete()
-            Unlike.objects.create(content_type=ctype, object_id=obj.id, unliked_by=profile)
-            model.objects.filter(pk=obj.pk).update(total_unlike=F('total_unlike') + 1)
-            return Response({'status': 201, 'unliked': True})
-
-
-# ---------------- Videos ----------------
-class FeedVideoListCreateAPIView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
+class FeedDetailView(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def get(self, request):
-        vids = FeedVideo.objects.select_related('profile').order_by('-created_at')
-        serializer = FeedVideoSerializer(vids, many=True)
-        return Response({'status': 200, 'data': serializer.data})
+    def get(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        serializer = FeedSerializer(feed, context={"request": request})
+        return Response(serializer.data)
 
-    def post(self, request):
-        serializer = FeedVideoSerializer(data=request.data)
+    def put(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        serializer = FeedSerializer(feed, data=request.data, partial=True, context={"request": request})
         if serializer.is_valid():
-            profile = get_profile_from_request(request.user)
-            serializer.save(profile=profile)
-            return Response({'status': 201, 'data': serializer.data}, status=status.HTTP_201_CREATED)
-        return Response({'status': 400, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        feed.delete()
+        return Response({"message": "Feed deleted"}, status=status.HTTP_204_NO_CONTENT)
 
 
-class FeedVideoDetailAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
 
-    def get(self, request, video_id):
-        video = get_object_or_404(FeedVideo, pk=video_id)
-        serializer = FeedVideoSerializer(video)
-        return Response({'status': 200, 'data': serializer.data})
+# LIKE / UNLIKE TOGGLE
 
 
-class IncrementVideoViewAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
+class LikeToggle(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, video_id):
-        video = get_object_or_404(FeedVideo, pk=video_id)
-        FeedVideo.objects.filter(pk=video.pk).update(total_view=F('total_view') + 1)
-        return Response({'status': 200, 'message': 'view incremented'})
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        profile = request.user.profile
+        existing_like = Like.objects.filter(
+            content_type__model="feed", object_id=feed.id, liked_by=profile
+        )
+        if existing_like.exists():
+            existing_like.delete()
+            feed.total_like = max(feed.total_like - 1, 0)
+            feed.save(update_fields=["total_like"])
+            return Response({"liked": False})
+        Like.objects.create(content_object=feed, liked_by=profile)
+        feed.total_like += 1
+        feed.save(update_fields=["total_like"])
+        return Response({"liked": True})
 
 
-# ---------------- Story APIs ----------------
-class StoryListCreateAPIView(APIView):
+
+#  COMMENT CREATE + LIST
+
+
+class CommentListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        comments = Comment.objects.filter(object_id=feed.id).order_by("-created_at")
+        serializer = CommentSerializer(comments, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        serializer = CommentSerializer(data=request.data, context={"request": request})
+        if serializer.is_valid():
+            serializer.save(content_object=feed, comment_by=request.user.profile)
+            feed.total_comment += 1
+            feed.save(update_fields=["total_comment"])
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+# COMMENT EDIT & DELETE (only by owner)
+
+class CommentDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def put(self, request, pk):
+        
+        comment = get_object_or_404(Comment, id=pk, comment_by=request.user.profile)
+        new_content = request.data.get("content", "").strip()
+        if not new_content:
+            return Response({"error": "Content cannot be empty."}, status=400)
+        comment.content = new_content
+        comment.save(update_fields=["content"])
+        return Response({"message": "Comment updated successfully.", "content": comment.content})
+
+    def delete(self, request, pk):
+        
+        comment = get_object_or_404(Comment, id=pk, comment_by=request.user.profile)
+        feed = comment.content_object
+        comment.delete()
+        # safely reduce count
+        if hasattr(feed, "total_comment") and feed.total_comment > 0:
+            feed.total_comment -= 1
+            feed.save(update_fields=["total_comment"])
+        return Response({"message": "Comment deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+
+
+
+#  UNLOCK LOCKED FEED (Spend Coins)
+
+
+class UnlockFeed(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        fan = request.user
+        if feed.status != "locked":
+            return Response({"detail": "Feed is already public"}, status=400)
+
+        if feed.is_unlocked_for(fan):
+            return Response({"detail": "Already unlocked"}, status=400)
+
+        try:
+            spend_coins(fan, feed.profile.user, service="locked", coins=feed.unlock_price)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+        Unlock.objects.create(feed=feed, fan=fan.profile)
+        feed.total_view += 1
+        feed.save(update_fields=["total_view"])
+        return Response({"message": "Feed unlocked successfully"})
+
+
+
+# FOLLOW / UNFOLLOW TOGGLE
+
+
+class FollowToggle(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, creator_id):
+        fan = request.user.profile
+        creator = get_object_or_404(UserProfile, id=creator_id)
+        if fan == creator:
+            return Response({"error": "You cannot follow yourself."}, status=400)
+
+        relation, created = Follow.objects.get_or_create(follower=fan, following=creator)
+        if not created:
+            relation.delete()
+            return Response({"following": False})
+        return Response({"following": True})
+
+
+
+#  TIP CREATOR (Spend Coins)
+
+
+class TipCreatorView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, creator_id):
+        fan = request.user
+        creator = get_object_or_404(UserProfile, id=creator_id)
+        coins = int(request.data.get("coins", 0))
+        if coins <= 0:
+            return Response({"error": "Invalid amount"}, status=400)
+
+        try:
+            spend_coins(fan, creator.user, service="tip", coins=coins)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+        FeedTip.objects.create(sender=fan.profile, receiver=creator, amount=coins)
+        return Response({"message": f"Tipped {creator.user.name} with {coins} coins!"})
+
+
+
+#  TOP FANS + MY CREATORS
+
+
+class CreatorTopFansView(APIView):
+   
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get(self, request, creator_id):
+        creator = get_object_or_404(UserProfile, id=creator_id)
+        fans = TopFan.objects.filter(creator=creator, status="active").order_by("-score")[:20]
+        serializer = TopFanSerializer(fans, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+class MyTopCreatorsView(APIView):
+   
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        fan = request.user.profile
+        creators = TopFan.objects.filter(fan=fan, status="active").order_by("-score")
+        serializer = TopFanSerializer(creators, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+
+
+class StoryView(APIView):
+    """Handle GET, POST, DELETE for stories"""
+    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        stories = Story.objects.select_related('profile').prefetch_related('items').order_by('-created_at')
-        serializer = StorySerializer(stories, many=True)
-        return Response({'status': 200, 'data': serializer.data})
+        """List active stories of self + following"""
+        profile = request.user.profile
+        following = profile.following.values_list("following_id", flat=True)
+        now = timezone.now()
+
+        stories = Story.objects.filter(
+            models.Q(profile=profile) | models.Q(profile__in=following)
+        ).order_by("-created_at")
+
+        data = []
+        for story in stories:
+            items = story.items.filter(is_active=True, expired_at__gt=now)
+            if not items.exists():
+                continue
+            data.append({
+                "story_id": story.id,
+                "creator": story.profile.user.name,
+                "created_at": story.created_at,
+                "items": [
+                    {
+                        "id": i.id,
+                        "file": request.build_absolute_uri(i.file.url),
+                        "expired_at": i.expired_at,
+                        "is_active": not i.is_expired(),
+                    }
+                    for i in items
+                ],
+            })
+        return Response(data)
 
     def post(self, request):
-        profile = get_profile_from_request(request.user)
-        story = Story.objects.create(profile=profile)
-        # accept single file for story item via key 'file'
-        if 'file' in request.FILES:
-            expired_at = request.data.get('expired_at')  # expect ISO datetime string
-            StoryItem.objects.create(story=story, file=request.FILES['file'], expired_at=expired_at or None)
-        return Response({'status': 201, 'message': 'story created'})
+        """Upload new story (multiple files allowed)"""
+        profile = request.user.profile
+        story, _ = Story.objects.get_or_create(profile=profile)
+        files = request.FILES.getlist("files")
 
+        if not files:
+            return Response({"detail": "No files uploaded."}, status=400)
 
-# ---------------- TopFan / Transaction (Tip) ----------------
-class TopFanListCreateAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+        for f in files:
+            StoryItem.objects.create(
+                story=story,
+                file=f,
+                expired_at=timezone.now() + timedelta(hours=24),
+            )
+        return Response({"message": "Story uploaded successfully."}, status=201)
 
-    def get(self, request):
-        profile = get_profile_from_request(request.user)
-        # show fans of the user (those who are fans of me)
-        fans = TopFan.objects.filter(iam=profile)
-        serializer = TopFanSerializer(fans, many=True)
-        return Response({'status': 200, 'data': serializer.data})
-
-    def post(self, request):
-        # to mark someone as top fan: provide 'fan_profile_id'
-        profile = get_profile_from_request(request.user)
-        fan_id = request.data.get('fan_profile_id')
-        fan_profile = get_object_or_404(Profile, pk=fan_id)
-        topfan, created = TopFan.objects.get_or_create(iam=profile, fan_profile=fan_profile)
-        serializer = TopFanSerializer(topfan)
-        return Response({'status': 201 if created else 200, 'data': serializer.data})
-
-
-class TipTransactionAPIView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        """
-        POST payload:
-        {
-            "to_profile_id": int,
-            "amount": "12.50"
-        }
-        """
-        to_profile_id = request.data.get('to_profile_id')
-        amount = request.data.get('amount')
-        if not to_profile_id or not amount:
-            return Response({'status': 400, 'message': 'to_profile_id and amount are required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        from_profile = get_profile_from_request(request.user)
-        to_profile = get_object_or_404(Profile, pk=to_profile_id)
-
-        # In production: integrate payment gateway here; here we just record tip transaction
-        with db_transaction.atomic():
-            txn = Transaction.objects.create(profile=to_profile, type='tip', amount=amount)
-            # Optionally: increase total_earn on FeedVideo/CreatorProfile etc if needed.
-
-        return Response({'status': 201, 'message': 'Tip recorded', 'data': TransactionSerializer(txn).data}, status=status.HTTP_201_CREATED)
-
-
-# ---------------- Creator Profile ----------------
-class CreatorProfileDetailAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, profile_id):
-        profile = get_object_or_404(Profile, pk=profile_id)
-        creator = getattr(profile, 'creatorprofile', None)
-        if not creator:
-            return Response({'status': 404, 'message': 'Not a creator'}, status=status.HTTP_404_NOT_FOUND)
-        serializer = CreatorProfileSerializer(creator)
-        return Response({'status': 200, 'data': serializer.data})
+    def delete(self, request):
+        """Delete your own story (and all items)"""
+        profile = request.user.profile
+        deleted, _ = Story.objects.filter(profile=profile).delete()
+        if deleted:
+            return Response({"message": "Story deleted successfully."}, status=204)
+        return Response({"detail": "No story found."}, status=404)

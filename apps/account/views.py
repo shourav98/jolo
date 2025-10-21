@@ -4,6 +4,8 @@ from rest_framework import status, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import CustomUser, OTPVerification
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.core.cache import cache
+import uuid
 from .serializers import (
     SignupSerializer,
     LoginSerializer,
@@ -134,29 +136,60 @@ class ForgotPasswordOTPVerifyView(APIView):
 
             otp_obj.is_used = True
             otp_obj.save()
-            return Response({"message": "OTP verified successfully"})
+
+            # ✅ Generate reset token
+            reset_token = str(uuid.uuid4())
+
+            # ✅ Store token in cache (key=token, value=user_id)
+            cache.set(reset_token, user.id, timeout=300)  # 5 min validity
+
+            return Response({
+                "status": 200,
+                "success": True,
+                "message": "OTP verified successfully.",
+                "reset_token": reset_token
+            }, status=status.HTTP_200_OK)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
 class ForgotPasswordResetView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        serializer = ForgotPasswordResetSerializer(data=request.data)
-        if serializer.is_valid():
-            phone = serializer.validated_data['phone']
-            new_password = serializer.validated_data['new_password']
+        reset_token = request.data.get('reset_token')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
 
-            try:
-                user = CustomUser.objects.get(phone=phone)
-            except CustomUser.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        if not reset_token:
+            return Response({"error": "Reset token is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            user.set_password(new_password)
-            user.save()
-            return Response({"message": "Password reset successful"})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if new_password != confirm_password:
+            return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ Get user_id from cache
+        user_id = cache.get(reset_token)
+        if not user_id:
+            return Response({"error": "Invalid or expired reset token"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = CustomUser.objects.get(id=user_id)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Reset password
+        user.set_password(new_password)
+        user.save()
+
+        # ✅ Delete used token
+        cache.delete(reset_token)
+
+        return Response({
+            "status": 200,
+            "success": True,
+            "message": "Password reset successful."
+        }, status=status.HTTP_200_OK)
 
 #change password
 

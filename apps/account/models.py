@@ -6,6 +6,7 @@ from datetime import timedelta
 from .managers import CustomUserManager
 
 
+
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, unique=True)
@@ -14,8 +15,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     is_superuser = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
-    USERNAME_FIELD = 'phone'
-    REQUIRED_FIELDS = ['name']
+    USERNAME_FIELD = "phone"
+    REQUIRED_FIELDS = ["name"]
 
     username = None
     objects = CustomUserManager()
@@ -29,6 +30,7 @@ class OTPVerification(models.Model):
         ("signup", "Signup"),
         ("reset", "Password Reset"),
     )
+
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="otps")
     otp = models.CharField(max_length=4)
     purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
@@ -39,7 +41,6 @@ class OTPVerification(models.Model):
         return f"{self.user.phone} - {self.purpose} - {self.otp}"
 
     def is_expired(self):
-        """Check if OTP expired (valid for 5 minutes)"""
         return timezone.now() > self.created_at + timedelta(minutes=5)
 
 
@@ -47,14 +48,15 @@ class UserProfile(models.Model):
     GENDER_CHOICES = (
         ("male", "Male"),
         ("female", "Female"),
+        ("other", "Other"),
     )
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='profile'
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
     )
-    profile_photo = models.ImageField(upload_to='profile_photos/', blank=True, null=True)
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/%Y/%m/%d/", blank=True, null=True
+    )
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     street_address = models.CharField(max_length=255, blank=True, null=True)
@@ -65,6 +67,10 @@ class UserProfile(models.Model):
     bio = models.TextField(blank=True, null=True)
     flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
+
+    # Monetization Application
+    id_proof = models.FileField(upload_to="id_proofs/%Y/%m/%d/", blank=True, null=True)
+    intro_video = models.FileField(upload_to="intro_videos/%Y/%m/%d/", blank=True, null=True)
 
     def __str__(self):
         return f"{self.user.name}'s Profile"

@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 from datetime import timedelta
-
+import os
+from dotenv import load_dotenv
+load_dotenv()
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -44,6 +46,7 @@ INSTALLED_APPS = [
     # Local apps
     'apps.account',
     'apps.feed.apps.FeedConfig',
+    'apps.monetization'
 
 ]
 
@@ -165,3 +168,27 @@ AUTH_USER_MODEL = 'account.CustomUser'
 #   CORS
 ###################################
 # CORS_ALLOW_ALL_ORIGINS = True
+
+
+
+
+
+
+
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-reset-token-cache',
+    }
+}
+
+
+
+#stripe
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/payment/success")
+STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/payment/cancel")
