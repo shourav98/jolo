@@ -1,30 +1,19 @@
 from django.urls import path
-from apps.feed import views
-
+from . import views
 
 urlpatterns = [
-    #  POST CRUD
-    path('posts/', views.FeedListCreateView.as_view(), name='feed-list-create'),
-    path('posts/<int:pk>/', views.FeedListCreateView.as_view(), name='feed-detail'),
+    path("feed/", views.FeedListCreateView.as_view(), name="feed-list"),
+    path("feed/<int:pk>/", views.FeedDetailView.as_view(), name="feed-detail"),
+    path("feed/<int:pk>/like/", views.LikeToggle.as_view(), name="feed-like-toggle"),
+    path("feed/<int:pk>/comments/", views.CommentListCreateView.as_view(), name="feed-comments"),
+    path("comments/<int:pk>/", views.CommentDetailView.as_view(), name="comment-detail"),
 
-    # COMMENTS CRUD
-    path('comments/', views.CommentListCreateView.as_view(), name='comment-list-create'),
-    path('comments/<int:pk>/', views.CommentListCreateView.as_view(), name='comment-detail'),
+    path("feed/<int:pk>/unlock/", views.UnlockFeed.as_view(), name="feed-unlock"),
+    path("follow/<int:creator_id>/", views.FollowToggle.as_view(), name="follow-toggle"),
+    path("top-fans/<int:creator_id>/", views.CreatorTopFansView.as_view(), name="creator-top-fans"),
+    path("my-creators/", views.MyTopCreatorsView.as_view(), name="my-creators"),
+    path("tip/<int:creator_id>/", views.TipCreatorView.as_view(), name="tip-creator"),
 
-    # 👍 LIKE / 👎 UNLIKE
-    path('likes/', views.LikeListCreateView.as_view(), name='like-list-create'),
-    path('unlikes/', views.UnlikeListCreateView.as_view(), name='unlike-list-create'),
+    path("stories/", views.StoryView.as_view(), name="stories"),
 
-    # STORIES
-    path('stories/', views.StoryListCreateView.as_view(), name='story-list-create'),
-    path('stories/<int:pk>/', views.StoryListCreateView.as_view(), name='story-detail'),
-
-    # 👥 FOLLOW / UNFOLLOW
-    path('follow/<int:user_id>/', views.FollowListCreateView.as_view(), name='follow-toggle'),
-
-    # TIP / TRANSACTION
-    path('transactions/', views.TipTransactionView.as_view(), name='tip-transaction'),
-
-    # TOPFANS (Leaderboard)
-    path('topfans/<int:creator_id>/', views.TopFanListView.as_view(), name='topfans-list'),
 ]

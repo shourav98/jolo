@@ -1,46 +1,113 @@
 from django.contrib import admin
 from unfold.admin import ModelAdmin
-from .models import Feed, FeedFile, FeedVideo, Comment, Like, Unlike, Story, StoryItem
+from .models import (
+    Feed, FeedFile, Comment, Like, Follow,
+    Unlock, FeedTip, Story, StoryItem, TopFan
+)
 
+
+# ---------- FEED ----------
 @admin.register(Feed)
 class FeedAdmin(ModelAdmin):
-    list_display = ('id', 'profile', 'content', 'total_like', 'total_comment', 'status', 'created_at')
-    search_fields = ('content',)
-    list_filter = ('status', 'created_at')
+    list_display = (
+        "id", "profile", "status", "unlock_price",
+        "total_like", "total_comment", "total_view",
+        "created_at"
+    )
+    list_filter = ("status", "created_at")
+    search_fields = ("profile__user__name", "content")
+    readonly_fields = ("created_at", "updated_at")
+    ordering = ("-created_at",)
+    list_per_page = 50
 
+
+# ---------- FEED FILE ----------
 @admin.register(FeedFile)
 class FeedFileAdmin(ModelAdmin):
-    list_display = ('id', 'feed', 'file')
-    search_fields = ('feed__content',)
+    list_display = ("feed", "file", "created_at")
+    search_fields = ("feed__profile__user__name",)
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
 
-@admin.register(FeedVideo)
-class FeedVideoAdmin(ModelAdmin):
-    list_display = ('id', 'profile', 'title', 'total_like', 'total_comment', 'total_view', 'created_at')
-    search_fields = ('title', 'description')
-    list_filter = ('created_at',)
 
+# ---------- COMMENT ----------
 @admin.register(Comment)
 class CommentAdmin(ModelAdmin):
-    list_display = ('id', 'content_type_id', 'comment_by', 'content', 'created_at')
-    search_fields = ('content',)
-    list_filter = ('created_at',)
+    list_display = ("id", "comment_by", "content", "created_at")
+    search_fields = ("comment_by__user__name", "content")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
 
+
+# ---------- LIKE ----------
 @admin.register(Like)
 class LikeAdmin(ModelAdmin):
-    list_display = ('id', 'content_type_id', 'liked_by', 'created_at')
-    list_filter = ('created_at',)
+    list_display = ("id", "liked_by", "content_type", "object_id", "created_at")
+    search_fields = ("liked_by__user__name",)
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
 
-@admin.register(Unlike)
-class UnlikeAdmin(ModelAdmin):
-    list_display = ('id', 'content_type_id', 'unliked_by', 'created_at')
-    list_filter = ('created_at',)
 
+# ---------- FOLLOW ----------
+@admin.register(Follow)
+class FollowAdmin(ModelAdmin):
+    list_display = ("follower", "following", "created_at")
+    search_fields = ("follower__user__name", "following__user__name")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- UNLOCK ----------
+@admin.register(Unlock)
+class UnlockAdmin(ModelAdmin):
+    list_display = ("fan", "feed", "created_at")
+    search_fields = ("fan__user__name", "feed__profile__user__name")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- FEED TIP ----------
+@admin.register(FeedTip)
+class FeedTipAdmin(ModelAdmin):
+    list_display = ("sender", "receiver", "amount", "created_at")
+    search_fields = ("sender__user__name", "receiver__user__name")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- STORY ----------
 @admin.register(Story)
 class StoryAdmin(ModelAdmin):
-    list_display = ('id', 'profile', 'created_at')
-    list_filter = ('created_at',)
+    list_display = ("profile", "created_at")
+    search_fields = ("profile__user__name",)
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
 
+
+# ---------- STORY ITEM ----------
 @admin.register(StoryItem)
 class StoryItemAdmin(ModelAdmin):
-    list_display = ('id', 'story', 'file', 'created_at', 'expired_at', 'is_active', 'total_view')
-    list_filter = ('is_active', 'created_at', 'expired_at')
+    list_display = ("story", "file", "expired_at", "is_active", "created_at")
+    search_fields = ("story__profile__user__name",)
+    readonly_fields = ("created_at",)
+    list_filter = ("is_active",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- TOP FAN ----------
+@admin.register(TopFan)
+class TopFanAdmin(ModelAdmin):
+    list_display = ("fan", "creator", "score", "last_interacted", "status")
+    search_fields = ("fan__user__name", "creator__user__name")
+    list_filter = ("status",)
+    ordering = ("-score", "-last_interacted")
+    readonly_fields = ("last_interacted",)
+    list_per_page = 50

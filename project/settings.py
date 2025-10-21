@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 from datetime import timedelta
-
+import os
+from dotenv import load_dotenv
+load_dotenv()
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -12,7 +14,7 @@ SECRET_KEY = 'kcponinneq@v3g95g^#@r0-i6zz^sdu&2=p2glm@1u(^hv7ky5'
 
 DEBUG = True   # ⚠️ Production e False korte hobe
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['*']
 
 ###################################
 #   APPLICATIONS
@@ -166,3 +168,27 @@ AUTH_USER_MODEL = 'account.CustomUser'
 #   CORS
 ###################################
 # CORS_ALLOW_ALL_ORIGINS = True
+
+
+
+
+
+
+
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-reset-token-cache',
+    }
+}
+
+
+
+#stripe
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_SUCCESS_URL = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/payment/success")
+STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/payment/cancel")
