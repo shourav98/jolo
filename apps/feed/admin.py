@@ -1,4 +1,5 @@
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 from .models import (
     Feed, FeedFile, Comment, Like, Follow,
     Unlock, FeedTip, Story, StoryItem, TopFan
@@ -7,7 +8,7 @@ from .models import (
 
 # ---------- FEED ----------
 @admin.register(Feed)
-class FeedAdmin(admin.ModelAdmin):
+class FeedAdmin(ModelAdmin):
     list_display = (
         "id", "profile", "status", "unlock_price",
         "total_like", "total_comment", "total_view",
@@ -22,7 +23,7 @@ class FeedAdmin(admin.ModelAdmin):
 
 # ---------- FEED FILE ----------
 @admin.register(FeedFile)
-class FeedFileAdmin(admin.ModelAdmin):
+class FeedFileAdmin(ModelAdmin):
     list_display = ("feed", "file", "created_at")
     search_fields = ("feed__profile__user__name",)
     readonly_fields = ("created_at",)
@@ -32,7 +33,7 @@ class FeedFileAdmin(admin.ModelAdmin):
 
 # ---------- COMMENT ----------
 @admin.register(Comment)
-class CommentAdmin(admin.ModelAdmin):
+class CommentAdmin(ModelAdmin):
     list_display = ("id", "comment_by", "content", "created_at")
     search_fields = ("comment_by__user__name", "content")
     readonly_fields = ("created_at",)
@@ -42,7 +43,7 @@ class CommentAdmin(admin.ModelAdmin):
 
 # ---------- LIKE ----------
 @admin.register(Like)
-class LikeAdmin(admin.ModelAdmin):
+class LikeAdmin(ModelAdmin):
     list_display = ("id", "liked_by", "content_type", "object_id", "created_at")
     search_fields = ("liked_by__user__name",)
     readonly_fields = ("created_at",)
@@ -52,7 +53,7 @@ class LikeAdmin(admin.ModelAdmin):
 
 # ---------- FOLLOW ----------
 @admin.register(Follow)
-class FollowAdmin(admin.ModelAdmin):
+class FollowAdmin(ModelAdmin):
     list_display = ("follower", "following", "created_at")
     search_fields = ("follower__user__name", "following__user__name")
     readonly_fields = ("created_at",)
@@ -62,7 +63,7 @@ class FollowAdmin(admin.ModelAdmin):
 
 # ---------- UNLOCK ----------
 @admin.register(Unlock)
-class UnlockAdmin(admin.ModelAdmin):
+class UnlockAdmin(ModelAdmin):
     list_display = ("fan", "feed", "created_at")
     search_fields = ("fan__user__name", "feed__profile__user__name")
     readonly_fields = ("created_at",)
@@ -72,7 +73,7 @@ class UnlockAdmin(admin.ModelAdmin):
 
 # ---------- FEED TIP ----------
 @admin.register(FeedTip)
-class FeedTipAdmin(admin.ModelAdmin):
+class FeedTipAdmin(ModelAdmin):
     list_display = ("sender", "receiver", "amount", "created_at")
     search_fields = ("sender__user__name", "receiver__user__name")
     readonly_fields = ("created_at",)
@@ -82,7 +83,7 @@ class FeedTipAdmin(admin.ModelAdmin):
 
 # ---------- STORY ----------
 @admin.register(Story)
-class StoryAdmin(admin.ModelAdmin):
+class StoryAdmin(ModelAdmin):
     list_display = ("profile", "created_at")
     search_fields = ("profile__user__name",)
     readonly_fields = ("created_at",)
@@ -92,7 +93,7 @@ class StoryAdmin(admin.ModelAdmin):
 
 # ---------- STORY ITEM ----------
 @admin.register(StoryItem)
-class StoryItemAdmin(admin.ModelAdmin):
+class StoryItemAdmin(ModelAdmin):
     list_display = ("story", "file", "expired_at", "is_active", "created_at")
     search_fields = ("story__profile__user__name",)
     readonly_fields = ("created_at",)
@@ -103,7 +104,7 @@ class StoryItemAdmin(admin.ModelAdmin):
 
 # ---------- TOP FAN ----------
 @admin.register(TopFan)
-class TopFanAdmin(admin.ModelAdmin):
+class TopFanAdmin(ModelAdmin):
     list_display = ("fan", "creator", "score", "last_interacted", "status")
     search_fields = ("fan__user__name", "creator__user__name")
     list_filter = ("status",)

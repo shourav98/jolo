@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from unfold.admin import ModelAdmin
 from django.utils import timezone
 from .models import (
     CoinPackage, Wallet, CoinPurchase, CreatorMonetization,
@@ -9,7 +10,7 @@ from apps.monetization.utils_notify import send_sms, send_whatsapp
 
 #  COIN PACKAGE 
 @admin.register(CoinPackage)
-class CoinPackageAdmin(admin.ModelAdmin):
+class CoinPackageAdmin(ModelAdmin):
     list_display = ("name", "coins", "price_usd", "per_coin_rate")
     search_fields = ("name",)
     ordering = ("coins",)
@@ -18,7 +19,7 @@ class CoinPackageAdmin(admin.ModelAdmin):
 
 # WALLET 
 @admin.register(Wallet)
-class WalletAdmin(admin.ModelAdmin):
+class WalletAdmin(ModelAdmin):
     list_display = ("user", "balance", "updated_at")
     search_fields = ("user__name", "user__phone")
     readonly_fields = ("updated_at",)
@@ -27,7 +28,7 @@ class WalletAdmin(admin.ModelAdmin):
 
 #  COIN PURCHASE 
 @admin.register(CoinPurchase)
-class CoinPurchaseAdmin(admin.ModelAdmin):
+class CoinPurchaseAdmin(ModelAdmin):
     list_display = ("user", "package", "coins_added", "amount_usd", "method", "txn_id", "created_at")
     list_filter = ("method", "created_at")
     search_fields = ("user__name", "txn_id")
@@ -68,7 +69,7 @@ def approve_selected(modeladmin, request, queryset):
 
 
 @admin.register(CreatorMonetization)
-class CreatorMonetizationAdmin(admin.ModelAdmin):
+class CreatorMonetizationAdmin(ModelAdmin):
     list_display = ("user", "status", "applied_at", "approved_at", "reviewed_by")
     list_filter = ("status",)
     search_fields = ("user__name", "user__phone")
@@ -79,7 +80,7 @@ class CreatorMonetizationAdmin(admin.ModelAdmin):
 
 # ---------- CREATOR PROFILE ----------
 @admin.register(CreatorProfile)
-class CreatorProfileAdmin(admin.ModelAdmin):
+class CreatorProfileAdmin(ModelAdmin):
     list_display = ("user", "tier", "engagement_score", "active_fans", "is_inactive", "last_refresh")
     list_filter = ("tier", "is_inactive")
     search_fields = ("user__name", "user__phone")
@@ -89,7 +90,7 @@ class CreatorProfileAdmin(admin.ModelAdmin):
 
 # PAYOUT ACCOUNT 
 @admin.register(PayoutAccount)
-class PayoutAccountAdmin(admin.ModelAdmin):
+class PayoutAccountAdmin(ModelAdmin):
     list_display = ("user", "bank_name", "account_holder_name", "account_number", "is_default", "created_at")
     list_filter = ("is_default", "created_at")
     search_fields = ("user__name", "bank_name", "account_holder_name")
@@ -120,7 +121,7 @@ def reject_selected(modeladmin, request, queryset):
     messages.warning(request, f"⚠️ Rejected {count} payout(s).")
 
 @admin.register(PayoutRequest)
-class PayoutRequestAdmin(admin.ModelAdmin):
+class PayoutRequestAdmin(ModelAdmin):
     list_display = ("user", "amount_usd", "status", "account", "created_at", "processed_at")
     list_filter = ("status", "created_at")
     search_fields = ("user__name", "user__phone")
@@ -132,7 +133,7 @@ class PayoutRequestAdmin(admin.ModelAdmin):
 
 # SPEND EVENTS 
 @admin.register(SpendEvent)
-class SpendEventAdmin(admin.ModelAdmin):
+class SpendEventAdmin(ModelAdmin):
     list_display = ("creator", "fan", "service", "coins_spent", "usd_creator", "usd_platform", "created_at")
     list_filter = ("service", "created_at")
     search_fields = ("creator__name", "fan__name", "service")
