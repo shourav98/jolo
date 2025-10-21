@@ -68,5 +68,9 @@ class UserProfile(models.Model):
     flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
 
+    # Monetization Application
+    id_proof = models.FileField(upload_to="id_proofs/%Y/%m/%d/", blank=True, null=True)
+    intro_video = models.FileField(upload_to="intro_videos/%Y/%m/%d/", blank=True, null=True)
+
     def __str__(self):
         return f"{self.user.name}'s Profile"

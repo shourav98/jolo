@@ -1,172 +1,92 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
-from decimal import Decimal
-from .models import (
-    Feed, FeedVideo, Like, Unlike, Comment,
-    Transaction, VideoTip, Wallet, CreatorProfile, TopFan
+from datetime import timedelta
+from apps.feed.models import (
+    Feed, Like, Comment, Unlock, FeedTip, TopFan,StoryItem
 )
 
-
-
-#  UNIVERSAL HELPER FOR TOP FAN SCORE
-
-
-def update_topfan_score(creator_profile, fan_profile, points):
-    
-    if not creator_profile or not fan_profile:
+# helper: add or update fan score
+def update_topfan(creator, fan, points: int):
+    if creator == fan:
         return
-    if creator_profile == fan_profile:
-        return  
-
-    fan, created = TopFan.objects.get_or_create(
-        iam=creator_profile,
-        fan_profile=fan_profile,
-        defaults={"score": points, "status": "active"}
+    obj, created = TopFan.objects.get_or_create(
+        creator=creator,
+        fan=fan,
+        defaults={"score": points, "status": "active"},
     )
     if not created:
-        fan.score += points
-        fan.last_interacted = timezone.now()
-        fan.save(update_fields=["score", "last_interacted"])
+        obj.score += points
+        obj.last_interacted = timezone.now()
+        obj.save(update_fields=["score", "last_interacted"])
 
 
 
-#  LIKE / UNLIKE + COUNTS + FAN SCORE
-
+# LIKE SIGNALS
 
 @receiver(post_save, sender=Like)
-def handle_like(sender, instance, created, **kwargs):
-   
-    target = instance.content_object
-
+def add_like(sender, instance, created, **kwargs):
     if created:
-        # Toggle unlike remove
-        Unlike.objects.filter(
-            content_type=instance.content_type,
-            object_id=instance.object_id,
-            unliked_by=instance.liked_by
-        ).delete()
-
-        # Like count update
-        if hasattr(target, "total_like"):
-            target.total_like += 1
-            target.save(update_fields=["total_like"])
-
-        # Fan scoring
-        creator = getattr(target, "profile", None)
-        fan = instance.liked_by
-        update_topfan_score(creator, fan, points=2)
-
+        feed = instance.content_object
+        if isinstance(feed, Feed):
+            feed.total_like += 1
+            feed.save(update_fields=["total_like"])
+            update_topfan(feed.profile, instance.liked_by, 2)
 
 @receiver(post_delete, sender=Like)
-def handle_like_delete(sender, instance, **kwargs):
-    target = instance.content_object
-    if hasattr(target, "total_like") and target.total_like > 0:
-        target.total_like -= 1
-        target.save(update_fields=["total_like"])
-
-
-@receiver(post_save, sender=Unlike)
-def handle_unlike(sender, instance, created, **kwargs):
-   
-    target = instance.content_object
-    if created:
-        Like.objects.filter(
-            content_type=instance.content_type,
-            object_id=instance.object_id,
-            liked_by=instance.unliked_by
-        ).delete()
-
-        if hasattr(target, "total_unlike"):
-            target.total_unlike += 1
-            target.save(update_fields=["total_unlike"])
-
-
-@receiver(post_delete, sender=Unlike)
-def handle_unlike_delete(sender, instance, **kwargs):
-    target = instance.content_object
-    if hasattr(target, "total_unlike") and target.total_unlike > 0:
-        target.total_unlike -= 1
-        target.save(update_fields=["total_unlike"])
+def remove_like(sender, instance, **kwargs):
+    feed = instance.content_object
+    if isinstance(feed, Feed) and feed.total_like > 0:
+        feed.total_like -= 1
+        feed.save(update_fields=["total_like"])
 
 
 
-#  COMMENT COUNT + FAN SCORE
+# COMMENT SIGNALS
 
 @receiver(post_save, sender=Comment)
-def handle_comment(sender, instance, created, **kwargs):
-    
+def add_comment(sender, instance, created, **kwargs):
     if created:
-        target = instance.content_object
-        if hasattr(target, "total_comment"):
-            target.total_comment += 1
-            target.save(update_fields=["total_comment"])
-
-        creator = getattr(target, "profile", None)
-        fan = instance.comment_by
-        update_topfan_score(creator, fan, points=3)
-
+        feed = instance.content_object
+        if isinstance(feed, Feed):
+            feed.total_comment += 1
+            feed.save(update_fields=["total_comment"])
+            update_topfan(feed.profile, instance.comment_by, 3)
 
 @receiver(post_delete, sender=Comment)
-def handle_comment_delete(sender, instance, **kwargs):
-    target = instance.content_object
-    if hasattr(target, "total_comment") and target.total_comment > 0:
-        target.total_comment -= 1
-        target.save(update_fields=["total_comment"])
+def remove_comment(sender, instance, **kwargs):
+    feed = instance.content_object
+    if isinstance(feed, Feed) and feed.total_comment > 0:
+        feed.total_comment -= 1
+        feed.save(update_fields=["total_comment"])
 
 
 
-#  TRANSACTION (TIP / GIFT) + WALLET + FAN SCORE
+# UNLOCK SIGNALS
 
-
-@receiver(post_save, sender=Transaction)
-def handle_transaction(sender, instance, created, **kwargs):
-    """Tip/Gift  wallet update and fan score update"""
+@receiver(post_save, sender=Unlock)
+def add_unlock(sender, instance, created, **kwargs):
     if created:
-        sender_wallet, _ = Wallet.objects.get_or_create(profile=instance.sender)
-        receiver_wallet, _ = Wallet.objects.get_or_create(profile=instance.receiver)
-        amount = Decimal(instance.amount)
-
-        # Safe update
-        sender_wallet.balance = max(sender_wallet.balance - amount, Decimal("0.00"))
-        receiver_wallet.balance += amount
-
-        sender_wallet.save(update_fields=["balance"])
-        receiver_wallet.save(update_fields=["balance"])
-
-        # Fan score update (+5)
-        update_topfan_score(instance.receiver, instance.sender, points=5)
+        feed = instance.feed
+        feed.total_view += 1
+        feed.save(update_fields=["total_view"])
+        update_topfan(feed.profile, instance.fan, 5)
 
 
 
-#  VIDEO TIP AUTOMATION
+# TIP SIGNALS
 
-
-@receiver(post_save, sender=VideoTip)
-def handle_video_tip(sender, instance, created, **kwargs):
-    
+@receiver(post_save, sender=FeedTip)
+def add_tip(sender, instance, created, **kwargs):
     if created:
-        video = instance.video
-        if hasattr(video, "total_earn"):
-            video.total_earn += instance.amount
-            video.save(update_fields=["total_earn"])
-
-        receiver_wallet, _ = Wallet.objects.get_or_create(profile=video.profile)
-        receiver_wallet.balance += instance.amount
-        receiver_wallet.save(update_fields=["balance"])
-
-        # Fan scoring (+5)
-        update_topfan_score(video.profile, instance.sender, points=5)
+        update_topfan(instance.receiver, instance.sender, 5)
 
 
+#Story
 
-#  VIDEO VIEW → FAN SCORE 
-
-
-@receiver(post_save, sender=FeedVideo)
-def handle_video_view(sender, instance, **kwargs):
+@receiver(post_save, sender=StoryItem)
+def auto_set_expiry(sender, instance, created, **kwargs):
     
-    viewer = getattr(instance, "viewer", None)
-    creator = instance.profile
-    if viewer:
-        update_topfan_score(creator, viewer, points=1)
+    if created and not instance.expired_at:
+        instance.expired_at = timezone.now() + timedelta(hours=24)
+        instance.save(update_fields=["expired_at"])

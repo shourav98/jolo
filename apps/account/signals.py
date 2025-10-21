@@ -6,7 +6,7 @@ from apps.monetization.models import Wallet, CreatorProfile, CreatorMonetization
 
 @receiver(post_save, sender=CustomUser)
 def create_related_records(sender, instance, created, **kwargs):
-    """new user create auto update ..."""
+    
     if created:
         # Profile
         UserProfile.objects.get_or_create(user=instance)
@@ -20,7 +20,7 @@ def create_related_records(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=CreatorProfile)
 def set_creator_flag(sender, instance, created, **kwargs):
-    """CreatorProfile create or update UserProfile.is_creator = True """
+    
     try:
         profile = instance.user.profile
         if not profile.is_creator:
@@ -32,7 +32,7 @@ def set_creator_flag(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=CreatorProfile)
 def unset_creator_flag(sender, instance, **kwargs):
-    """CreatorProfile delete UserProfile.is_creator = False """
+    
     try:
         profile = instance.user.profile
         if profile.is_creator:
@@ -40,3 +40,5 @@ def unset_creator_flag(sender, instance, **kwargs):
             profile.save(update_fields=["is_creator"])
     except UserProfile.DoesNotExist:
         pass
+
+
