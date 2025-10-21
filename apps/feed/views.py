@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
+from datetime import timedelta
+from django.utils import timezone
 
 from apps.feed.models import (
     Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
@@ -254,12 +256,12 @@ class MyTopCreatorsView(APIView):
 
 
 class StoryView(APIView):
-    """Handle GET, POST, DELETE for stories"""
+    
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        """List active stories of self + following"""
+        
         profile = request.user.profile
         following = profile.following.values_list("following_id", flat=True)
         now = timezone.now()
@@ -290,7 +292,7 @@ class StoryView(APIView):
         return Response(data)
 
     def post(self, request):
-        """Upload new story (multiple files allowed)"""
+        
         profile = request.user.profile
         story, _ = Story.objects.get_or_create(profile=profile)
         files = request.FILES.getlist("files")
@@ -307,7 +309,7 @@ class StoryView(APIView):
         return Response({"message": "Story uploaded successfully."}, status=201)
 
     def delete(self, request):
-        """Delete your own story (and all items)"""
+        
         profile = request.user.profile
         deleted, _ = Story.objects.filter(profile=profile).delete()
         if deleted:
