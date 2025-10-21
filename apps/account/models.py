@@ -68,5 +68,11 @@ class UserProfile(models.Model):
     flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
 
+    # New fields for chat functionality
+    welcome_message = models.TextField(blank=True, null=True, help_text="Auto-reply welcome message for creators")
+    auto_translate = models.BooleanField(default=True, help_text="Auto-translate messages")
+    is_online = models.BooleanField(default=False)
+    last_online = models.DateTimeField(default=timezone.now)
+
     def __str__(self):
         return f"{self.user.name}'s Profile"

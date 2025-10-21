@@ -37,8 +37,15 @@ class SignupSerializer(serializers.ModelSerializer):
         user.save()
 
         profile_data = {k: validated_data.get(k) for k in profile_fields}
-        UserProfile.objects.create(user=user, **profile_data)
+        if profile_data:
+            profile = getattr(user, "profile", None)
+            if profile:
+                for key, value in profile_data.items():
+                    setattr(profile, key, value)
+                profile.save()
+
         return user
+    
 
 
 class LoginSerializer(serializers.Serializer):

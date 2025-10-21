@@ -2,16 +2,20 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+from django.utils import timezone
+from datetime import timedelta  
 
-# split base USD (spec )
+import logging
+logger = logging.getLogger(__name__)
+
+# Coin value and tier splits (add these constants)
 COIN_VALUE_USD = Decimal("0.02")
 
-# Tier split (platform_pct, creator_pct) — spec 
 TIER_SPLITS = {
-    "silver":   (Decimal("0.70"), Decimal("0.30")),
-    "gold":     (Decimal("0.60"), Decimal("0.40")),
-    "platinum": (Decimal("0.50"), Decimal("0.50")),
-    "diamond":  (Decimal("0.40"), Decimal("0.60")),
+    "silver": (Decimal("0.70"), Decimal("0.30")),    # 70% platform, 30% creator
+    "gold": (Decimal("0.60"), Decimal("0.40")),      # 60% platform, 40% creator  
+    "platinum": (Decimal("0.50"), Decimal("0.50")),  # 50% platform, 50% creator
+    "diamond": (Decimal("0.40"), Decimal("0.60")),   # 40% platform, 60% creator
 }
 
 
@@ -29,22 +33,72 @@ class CoinPackage(models.Model):
 
 
 class Wallet(models.Model):
-    # Vault
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wallet")
-    balance = models.PositiveIntegerField(default=0)
+    balance = models.PositiveIntegerField(default=0)  # Keep this as the actual stored balance
     updated_at = models.DateTimeField(auto_now=True)
+    last_purchase_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def calculated_balance(self):
+        """Calculate balance from coin lots (for verification)"""
+        return sum(lot.coins_remaining for lot in self.user.coin_lots.all())
 
     def add(self, coins: int):
         coins = int(coins)
+        # Create coin lot
+        CoinLot.objects.create(user=self.user, coins_granted=coins, coins_remaining=coins)
+        # Update the actual balance field
         self.balance += coins
-        self.save(update_fields=["balance", "updated_at"])
+        self.updated_at = timezone.now()
+        self.last_purchase_at = timezone.now()
+        self.save(update_fields=["balance", "updated_at", "last_purchase_at"])
 
     def spend(self, coins: int):
         coins = int(coins)
+        
+        # Check if we have enough balance
         if self.balance < coins:
             raise ValueError("Insufficient Vault balance")
+        
+        # Update coin lots using FIFO
+        remaining = coins
+        for lot in self.user.coin_lots.filter(coins_remaining__gt=0).order_by('grant_ts'):
+            if remaining <= 0:
+                break
+                
+            spend_from_lot = min(remaining, lot.coins_remaining)
+            lot.coins_remaining -= spend_from_lot
+            lot.save(update_fields=['coins_remaining'])
+            remaining -= spend_from_lot
+        
+        # Update the actual balance field
         self.balance -= coins
+        self.updated_at = timezone.now()
         self.save(update_fields=["balance", "updated_at"])
+        
+        # Verify that calculated balance matches stored balance
+        calculated = self.calculated_balance
+        if calculated != self.balance:
+            logger.warning(f"Balance mismatch: stored={self.balance}, calculated={calculated}")
+            # Auto-correct the balance if there's a mismatch
+            self.balance = calculated
+            self.save(update_fields=["balance"])
+
+    def expire_coins(self):
+        # Call via cron
+        expired_date = timezone.now() - timedelta(days=30)
+        expired_lots = self.user.coin_lots.filter(grant_ts__lt=expired_date, coins_remaining__gt=0)
+        
+        total_expired = 0
+        for lot in expired_lots:
+            total_expired += lot.coins_remaining
+            lot.coins_remaining = 0
+            lot.save()
+        
+        # Update balance if coins were expired
+        if total_expired > 0:
+            self.balance = max(0, self.balance - total_expired)
+            self.save(update_fields=["balance"])
 
     def __str__(self):
         return f"{self.user.name} • Vault: {self.balance}c"
@@ -108,6 +162,20 @@ class CreatorProfile(models.Model):
     last_refresh = models.DateTimeField(auto_now_add=True)
     is_inactive = models.BooleanField(default=False)
 
+
+    def update_tier_based_on_score(self):
+        """Update tier based on engagement score"""
+        if self.engagement_score >= 85:
+            self.tier = CreatorTier.DIAMOND
+        elif self.engagement_score >= 70:
+            self.tier = CreatorTier.PLATINUM
+        elif self.engagement_score >= 50:
+            self.tier = CreatorTier.GOLD
+        else:
+            self.tier = CreatorTier.SILVER
+        self.save()
+        
+
     def __str__(self):
         return f"{self.user.name} • {self.get_tier_display()}"
 
@@ -149,3 +217,27 @@ class SpendEvent(models.Model):
 
     def __str__(self):
         return f"{self.fan.name}→{self.creator.name} {self.service} {self.coins_spent}c"
+    
+
+
+
+
+
+# apps/monetization/models.py - Update CoinLot model
+class CoinLot(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="coin_lots")
+    coins_granted = models.PositiveIntegerField()
+    coins_remaining = models.PositiveIntegerField()
+    grant_ts = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['grant_ts']  # Oldest first for FIFO
+
+    def save(self, *args, **kwargs):
+        # Auto-set coins_remaining on first save if not set
+        if not self.pk and self.coins_remaining is None:
+            self.coins_remaining = self.coins_granted
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Lot: {self.coins_granted}c ({self.coins_remaining}c remaining)"

@@ -2,9 +2,6 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
 from django import forms
-
-from unfold.admin import ModelAdmin
-
 from unfold.admin import ModelAdmin  # ✅ Unfold base admin
 from .models import CustomUser, UserProfile
 
@@ -27,9 +24,6 @@ class CustomUserChangeForm(forms.ModelForm):
         fields = ('phone', 'name', 'is_active', 'is_staff', 'is_superuser')
 
 
-@admin.register(CustomUser)
-class CustomUserAdmin(ModelAdmin):
-    model = CustomUser
 
 
 # 🔹 Inline Profile Admin (editable inside user page)
@@ -50,7 +44,7 @@ class CustomUserAdmin(UserAdmin, ModelAdmin):
     inlines = [UserProfileInline]
 
     # Displayed columns
-    list_display = ("phone", "name", "is_staff", "is_active")
+    list_display = ("phone", "name", "is_staff", "is_active" , "id")
     list_filter = ("is_staff", "is_active", "is_superuser")
     search_fields = ("phone", "name")
     ordering = ("phone",)
@@ -70,13 +64,12 @@ class CustomUserAdmin(UserAdmin, ModelAdmin):
     )
 
 
-admin.site.register(UserProfile)
 
 
 # 🔹 Separate UserProfile registration (optional)
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
-    list_display = ("user", "gender", "city", "country", "is_creator")
+    list_display = ("user", "gender", "city", "country", "is_creator" , "id")
     list_filter = ("gender", "is_creator")
     search_fields = ("user__name", "user__phone", "city", "country")
 

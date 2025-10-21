@@ -1,6 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
+
+import jwt
+from django.conf import settings
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import CustomUser, OTPVerification
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -13,6 +16,9 @@ from .serializers import (
     ForgotPasswordResetSerializer,
 )
 import random
+
+
+
 
 
 # Signup
@@ -218,3 +224,49 @@ class LogoutView(APIView):
                 "success": False,
                 "message": "Logout failed."
             }, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+
+
+
+
+class VerifyTokenAPIView(APIView):
+    permission_classes = [AllowAny]  # Change this to AllowAny
+    
+    def get(self, request):
+        # Get token from query params (same way WebSocket does)
+        token = request.GET.get('token')
+        
+        if not token:
+            return Response({'error': 'No token provided'}, status=400)
+        
+        try:
+            payload = jwt.decode(
+                token, 
+                settings.SECRET_KEY, 
+                algorithms=["HS256"],
+                options={"verify_exp": True}
+            )
+            
+            user_id = payload.get('user_id')
+            
+            # Try to get the user
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            try:
+                user = User.objects.get(id=user_id)
+                return Response({
+                    'valid': True,
+                    'user_id': user_id,
+                    'user_name': user.name,
+                    'exp': payload.get('exp')
+                })
+            except User.DoesNotExist:
+                return Response({'valid': False, 'error': 'User not found'})
+                
+        except jwt.ExpiredSignatureError:
+            return Response({'valid': False, 'error': 'Token expired'})
+        except jwt.InvalidTokenError as e:
+            return Response({'valid': False, 'error': str(e)})

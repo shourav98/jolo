@@ -8,6 +8,8 @@ urlpatterns = [
     path('api/', include('apps.account.urls')),
     path('api/', include('apps.feed.urls')),
     path("api/", include("apps.monetization.urls")),
+    path("api/", include("apps.messaging.urls")),
+    # path("api/", include("apps.chatting_app.urls")),
 ]
 
 if settings.DEBUG:

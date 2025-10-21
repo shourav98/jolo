@@ -6,6 +6,7 @@ from .models import (
     MonetizationStatus
 )
 from .utils_notify import send_sms, send_whatsapp
+from unfold.admin import ModelAdmin 
 
 @admin.action(description="Approve selected applicants")
 def approve_selected(modeladmin, request, queryset):
@@ -36,14 +37,14 @@ def deny_selected(modeladmin, request, queryset):
     messages.warning(request, f"Denied {n} applicant(s).")
 
 @admin.register(CreatorMonetization)
-class CreatorMonetizationAdmin(admin.ModelAdmin):
+class CreatorMonetizationAdmin(ModelAdmin):
     list_display = ("user", "status", "applied_at", "approved_at", "reviewed_by")
     list_filter = ("status",)
     search_fields = ("user__name", "user__phone")
     actions = [approve_selected, deny_selected]
 
 @admin.register(CoinPackage)
-class CoinPackageAdmin(admin.ModelAdmin):
+class CoinPackageAdmin(ModelAdmin):
     list_display = ("name", "coins", "price_usd", "per_coin_rate")
     ordering = ("coins",)
 
