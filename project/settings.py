@@ -1,3 +1,4 @@
+
 import os
 from pathlib import Path
 from datetime import timedelta
@@ -20,6 +21,7 @@ ALLOWED_HOSTS = ['*']
 #   APPLICATIONS
 ###################################
 INSTALLED_APPS = [
+    "daphne",
     "unfold",  # before django.contrib.admin
     "unfold.contrib.filters",  # optional, if special filters are needed
     "unfold.contrib.forms",  # optional, if special form elements are needed
@@ -40,14 +42,18 @@ INSTALLED_APPS = [
     # 3rd party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'channels',
     # 'django.contrib.contenttypes'
     # 'corsheaders',
 
     # Local apps
     'apps.account',
     'apps.feed.apps.FeedConfig',
-    'apps.monetization'
+    'apps.messaging',
+    # 'apps.chatting_app',
 
+
+    'apps.monetization'
 ]
 
 MIDDLEWARE = [
@@ -80,7 +86,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'project.wsgi.application'
-# ASGI_APPLICATION = 'project.asgi.application'
+ASGI_APPLICATION = 'project.asgi.application'
+
+
+# Redis backend for channel layers
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # or your Redis host
+        },
+    },
+}
 
 ###################################
 #   DATABASE
@@ -109,7 +126,7 @@ AUTH_PASSWORD_VALIDATORS = [
 #   INTERNATIONALIZATION
 ###################################
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Dhaka'
 USE_I18N = True
 USE_TZ = True
 
@@ -151,8 +168,8 @@ REST_FRAMEWORK = {
 #   SIMPLE JWT CONFIG
 ###################################
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=1500),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=2),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -171,6 +188,31 @@ AUTH_USER_MODEL = 'account.CustomUser'
 # CORS_ALLOW_ALL_ORIGINS = True
 
 
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'debug.log',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'apps.messaging': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}
 
 
 

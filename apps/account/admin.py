@@ -6,6 +6,7 @@ from unfold.admin import ModelAdmin  # ✅ Unfold base admin
 from .models import CustomUser, UserProfile
 
 
+
 # 🔹 Remove Groups from sidebar
 admin.site.unregister(Group)
 
@@ -23,6 +24,8 @@ class CustomUserChangeForm(forms.ModelForm):
         fields = ('phone', 'name', 'is_active', 'is_staff', 'is_superuser')
 
 
+
+
 # 🔹 Inline Profile Admin (editable inside user page)
 class UserProfileInline(admin.StackedInline):
     model = UserProfile
@@ -34,13 +37,14 @@ class UserProfileInline(admin.StackedInline):
 # 🔹 Custom User Admin — clean & Unfold-styled
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin, ModelAdmin):
+
     add_form = CustomUserCreationForm
     form = CustomUserChangeForm
     model = CustomUser
     inlines = [UserProfileInline]
 
     # Displayed columns
-    list_display = ("phone", "name", "is_staff", "is_active")
+    list_display = ("phone", "name", "is_staff", "is_active" , "id")
     list_filter = ("is_staff", "is_active", "is_superuser")
     search_fields = ("phone", "name")
     ordering = ("phone",)
@@ -60,9 +64,12 @@ class CustomUserAdmin(UserAdmin, ModelAdmin):
     )
 
 
+
+
 # 🔹 Separate UserProfile registration (optional)
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
-    list_display = ("user", "gender", "city", "country", "is_creator")
+    list_display = ("user", "gender", "city", "country", "is_creator" , "id")
     list_filter = ("gender", "is_creator")
     search_fields = ("user__name", "user__phone", "city", "country")
+

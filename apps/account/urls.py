@@ -8,6 +8,7 @@ from .views import (
     ForgotPasswordOTPVerifyView,
     ForgotPasswordResetView,
     LogoutView,
+    VerifyTokenAPIView,
 )
 
 urlpatterns = [
@@ -19,4 +20,6 @@ urlpatterns = [
     path('forgot-password/verify/', ForgotPasswordOTPVerifyView.as_view(), name='forgot-password-verify'),
     path('forgot-password/reset/', ForgotPasswordResetView.as_view(), name='forgot-password-reset'),
     path('logout/', LogoutView.as_view(), name='logout'),
+
+    path('verify-token/', VerifyTokenAPIView.as_view(), name='verify-token'),
 ]
