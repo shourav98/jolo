@@ -1,199 +1,120 @@
 from rest_framework import serializers
-from django.conf import settings
-from apps.feed.models import (
-    Feed, FeedFile, FeedVideo, Comment,
-    Like, Unlike, Story, StoryItem,
-    Follow, TopFan, Transaction, VideoTip,
-    CreatorProfile, Announcement
-)
+from django.utils import timezone
+from apps.feed.models import Feed, FeedFile, Comment, Unlock, TopFan
 from apps.account.models import UserProfile
-from apps.monetization.models import Wallet
 
 
-# -----------------------------
-# 👤 SIMPLE USER PROFILE
-# -----------------------------
-class SimpleUserProfileSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source='user.name', read_only=True)
-
-    class Meta:
-        model = UserProfile
-        fields = ['id', 'name', 'profile_photo']
-
-
-# -----------------------------
-# 📰 FEED SERIALIZERS
-# -----------------------------
+# FILE SERIALIZER 
 class FeedFileSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = FeedFile
-        fields = ['id', 'file']
+        fields = ["id", "file_url"]
+
+    def get_file_url(self, obj):
+        request = self.context.get("request")
+        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
 
 
-class FeedVideoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FeedVideo
-        fields = [
-            'id', 'file', 'title', 'description',
-            'total_like', 'total_comment', 'total_view',
-            'total_earn', 'created_at'
-        ]
-
-
+#  FEED SERIALIZER 
 class FeedSerializer(serializers.ModelSerializer):
+    
+    author_name = serializers.CharField(source="profile.user.name", read_only=True)
+    author_id = serializers.IntegerField(source="profile.user.id", read_only=True)
+    author_photo = serializers.SerializerMethodField()
     files = FeedFileSerializer(many=True, read_only=True)
+    is_unlocked = serializers.SerializerMethodField()
 
     class Meta:
         model = Feed
         fields = [
-            'id', 'content', 'status', 'files',
-            'total_like', 'total_comment', 'created_at'
+            "id",
+            "author_id",
+            "author_name",
+            "author_photo",
+            "content",
+            "status",
+            "unlock_price",
+            "is_unlocked",
+            "total_like",
+            "total_comment",
+            "total_view",
+            "created_at",
+            "files",
         ]
+        read_only_fields = (
+            "id",
+            "total_like",
+            "total_comment",
+            "total_view",
+            "created_at",
+        )
+
+    # - computed helpers 
+    def get_author_photo(self, obj):
+        prof = getattr(obj.profile, "profile_photo", None)
+        if prof:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(prof.url)
+            return prof.url
+        return None
+
+    def get_is_unlocked(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return obj.status != "locked"
+        return obj.is_unlocked_for(user)
+
+    def to_representation(self, instance):
+      
+        rep = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        # If locked and viewer not unlocked, blank content & hide files
+        if instance.status == "locked" and not instance.is_unlocked_for(user):
+            rep["content"] = None
+            rep["files"] = []
+        return rep
 
 
-# 🪙 FEED CREATE + WALLET DEDUCTION
-class FeedCreateSerializer(serializers.Serializer):
-    content = serializers.CharField(required=False, allow_blank=True)
-    status = serializers.ChoiceField(
-        choices=[("public", "Public"), ("private", "Private"), ("friends", "Friends")],
-        required=True
-    )
-    image = serializers.ImageField(required=False)
-    video = serializers.FileField(required=False)
-
-    def create(self, validated_data):
-        user = self.context["request"].user
-        profile = user.profile
-        content = validated_data.get("content", "")
-        status = validated_data.get("status")
-        image = validated_data.get("image", None)
-        video = validated_data.get("video", None)
-
-        # 🪙 Deduct coin on post create
-        wallet, _ = Wallet.objects.get_or_create(user=user)
-        post_cost = getattr(settings, "POST_COST_COINS", 10)
-        if wallet.balance < post_cost:
-            raise serializers.ValidationError({"detail": "Insufficient coin balance to post."})
-        wallet.spend(post_cost)
-
-        # 📰 Create Feed
-        feed = Feed.objects.create(profile=profile, content=content, status=status)
-        if image:
-            FeedFile.objects.create(feed=feed, file=image)
-
-        feed_video = None
-        if video:
-            feed_video = FeedVideo.objects.create(
-                profile=profile,
-                file=video,
-                title=content[:100],
-                description=content
-            )
-
-        return {"feed": feed, "video": feed_video if video else None}
-
-
-# -----------------------------
-# 💬 COMMENT SERIALIZER
-# -----------------------------
+#  COMMENT SERIALIZER 
 class CommentSerializer(serializers.ModelSerializer):
-    comment_by = SimpleUserProfileSerializer(read_only=True)
+    user_name = serializers.CharField(source="comment_by.user.name", read_only=True)
+    user_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['id', 'content', 'comment_by', 'created_at']
+        fields = ["id", "user_name", "user_photo", "content", "created_at"]
+
+    def get_user_photo(self, obj):
+        prof = getattr(obj.comment_by, "profile_photo", None)
+        if prof:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(prof.url)
+            return prof.url
+        return None
 
 
-# -----------------------------
-# 👍 LIKE / 👎 UNLIKE SERIALIZERS
-# -----------------------------
-class LikeSerializer(serializers.ModelSerializer):
-    liked_by = SimpleUserProfileSerializer(read_only=True)
-
-    class Meta:
-        model = Like
-        fields = ['id', 'liked_by', 'created_at']
-
-
-class UnlikeSerializer(serializers.ModelSerializer):
-    unliked_by = SimpleUserProfileSerializer(read_only=True)
-
-    class Meta:
-        model = Unlike
-        fields = ['id', 'unliked_by', 'created_at']
-
-
-
-# STORY SERIALIZERS
-
-class StoryItemSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StoryItem
-        fields = ['id', 'file', 'is_active', 'total_view', 'created_at']
-
-
-class StorySerializer(serializers.ModelSerializer):
-    profile = SimpleUserProfileSerializer(read_only=True)
-    items = StoryItemSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Story
-        fields = ['id', 'profile', 'items', 'created_at']
-
-
-
-# FOLLOW / TOP FAN SERIALIZERS
-
-class FollowSerializer(serializers.ModelSerializer):
-    follower = SimpleUserProfileSerializer(read_only=True)
-    following = SimpleUserProfileSerializer(read_only=True)
-
-    class Meta:
-        model = Follow
-        fields = ['id', 'follower', 'following', 'created_at']
-
-
+#  TOP FAN SERIALIZER 
 class TopFanSerializer(serializers.ModelSerializer):
-    iam = SimpleUserProfileSerializer(read_only=True)
-    fan_profile = SimpleUserProfileSerializer(read_only=True)
+    fan_id = serializers.IntegerField(source="fan.id", read_only=True)
+    fan_name = serializers.CharField(source="fan.user.name", read_only=True)
+    fan_photo = serializers.SerializerMethodField()
 
     class Meta:
         model = TopFan
-        fields = ['id', 'iam', 'fan_profile', 'score', 'status', 'last_interacted']
+        fields = ["fan_id", "fan_name", "fan_photo", "score", "last_interacted"]
 
-
-
-# TRANSACTION / VIDEO TIP SERIALIZERS
-
-class TransactionSerializer(serializers.ModelSerializer):
-    sender = SimpleUserProfileSerializer(read_only=True)
-    receiver = SimpleUserProfileSerializer(read_only=True)
-
-    class Meta:
-        model = Transaction
-        fields = ['id', 'sender', 'receiver', 'type', 'amount', 'created_at']
-
-
-class VideoTipSerializer(serializers.ModelSerializer):
-    sender = SimpleUserProfileSerializer(read_only=True)
-
-    class Meta:
-        model = VideoTip
-        fields = ['id', 'video', 'sender', 'amount', 'created_at']
-
-
-
-#  CREATOR / ANNOUNCEMENT SERIALIZERS
-
-class CreatorProfileSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField()
-
-    class Meta:
-        model = CreatorProfile
-        fields = ['id', 'user', 'start_date', 'status']
-
-
-class AnnouncementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Announcement
-        fields = ['id', 'title', 'content', 'image', 'video', 'is_featured', 'created_at']
+    def get_fan_photo(self, obj):
+        prof = getattr(obj.fan, "profile_photo", None)
+        if prof:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(prof.url)
+            return prof.url
+        return None

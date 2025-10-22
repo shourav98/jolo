@@ -89,7 +89,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return not session.messages.filter(sender=user).exists()
 
     @database_sync_to_async
-    def spend_coins_and_create_message(self, session, user, content, message_type, coins_to_spend):
+    def spend_coins_and_create_message(self, session, user, content, coins_to_spend):
         from apps.messaging.models import Message
         from apps.monetization.services import spend_coins as monetization_spend_coins
         from apps.monetization.models import CreatorMonetization, MonetizationStatus
@@ -99,7 +99,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             session=session,
             sender=user,
             content=content,
-            message_type=message_type,
             coins_used=0  # Initialize as 0, update after payment
         )
         
@@ -140,7 +139,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return message
 
     @database_sync_to_async
-    def create_free_message(self, session, user, content, message_type):
+    def create_free_message(self, session, user, content):
         from apps.messaging.models import Message
         
         # Create the message (free)
@@ -148,7 +147,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             session=session,
             sender=user,
             content=content,
-            message_type=message_type,
             coins_used=0
         )
         
@@ -174,7 +172,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.info(f"Raw received data: {data}")
             
             content = data.get("content", "").strip()
-            message_type = data.get("message_type", "normal")
             
             if not content:
                 await self.send(json.dumps({"error": "Message content cannot be empty"}))
@@ -205,7 +202,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             
             if is_first_message_in_chat:
                 # First message is always free
-                message = await self.create_free_message(session, user, content, message_type)
+                message = await self.create_free_message(session, user, content)
                 logger.info(f"First message saved to database with ID: {message.id}")
                 
             else:
@@ -228,12 +225,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     
                     # Create message with coin spending
                     message = await self.spend_coins_and_create_message(
-                        session, user, content, message_type, coins_to_spend
+                        session, user, content, coins_to_spend
                     )
                     
                 else:
                     # Free message (creator or fan in free window or first message)
-                    message = await self.create_free_message(session, user, content, message_type)
+                    message = await self.create_free_message(session, user, content)
                 
                 logger.info(f"Message saved to database with ID: {message.id}")
 

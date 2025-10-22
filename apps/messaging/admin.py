@@ -5,8 +5,8 @@ from .models import ChatSession, Message, MessageReaction
 # Register your models here.
 @admin.register(Message)
 class MessagingAdmin(ModelAdmin):
-    list_display = ('id', 'session', 'sender', 'message_type', 'content', 'created_at', 'is_read')
-    list_filter = ('message_type', 'created_at', 'is_read')
+    list_display = ('id', 'session', 'sender', 'content', 'created_at', 'is_read')
+    list_filter = ('created_at', 'is_read')
     search_fields = ('content', 'sender__name', 'session__id')
     ordering = ('-created_at',)
 
