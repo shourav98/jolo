@@ -160,8 +160,6 @@ class PackageList(APIView):
         return api_response(data=CoinPackageSerializer(packs, many=True).data)
 
 
-
-
 class CreateStripeCheckout(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -187,8 +185,6 @@ class CreateStripeCheckout(APIView):
             cancel_url=settings.STRIPE_CANCEL_URL,
         )
         return api_response(message="Checkout session created.", data={"url": session.url})
-
-
 
 
 @csrf_exempt
