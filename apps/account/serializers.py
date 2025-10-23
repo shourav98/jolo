@@ -45,6 +45,7 @@ class SignupSerializer(serializers.ModelSerializer):
                 profile.save()
 
         return user
+    
 
 
 class LoginSerializer(serializers.Serializer):

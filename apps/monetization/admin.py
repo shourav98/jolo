@@ -5,6 +5,7 @@ from .models import (
     CoinPackage, Wallet, CoinPurchase, CreatorMonetization,
     CreatorProfile, PayoutAccount, PayoutRequest, SpendEvent, MonetizationStatus
 )
+from .utils_notify import send_sms, send_whatsapp
 from apps.monetization.utils_notify import send_sms, send_whatsapp
 
 

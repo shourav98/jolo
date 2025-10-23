@@ -35,3 +35,36 @@ def send_whatsapp(to_phone: str, body: str) -> bool:
     to = to_phone if str(to_phone).startswith("whatsapp:") else f"whatsapp:{to_phone}"
     client.messages.create(body=body, from_=from_wa, to=to)
     return True
+
+
+
+
+# Messaging Costs & Free Message Logic
+def can_send_free_message(session, user):
+    """Check if user can send a free message"""
+    if user == session.creator:
+        return True  # Creators always send free messages
+    
+    if session.is_free_window_active():
+        return True
+        
+    # First fan message is free if creator has messaged first
+    is_first_fan_message = not session.messages.filter(sender=user).exists()
+    if is_first_fan_message and session.messages.filter(sender=session.creator).exists():
+        return True
+        
+    return False
+
+def get_message_cost(session, user):
+    """Get cost for sending a message"""
+    if can_send_free_message(session, user):
+        return 0
+        
+    creator_profile = session.creator.creator_profile
+    tier_costs = {
+        "silver": 10,
+        "gold": 10,
+        "platinum": 15,
+        "diamond": 20
+    }
+    return tier_costs.get(creator_profile.tier, 10)

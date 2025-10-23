@@ -40,6 +40,10 @@ def api_response(success=True, message="Success", data=None, status_code=200):
 #  Monetization Apply / Status / Approve
 
 
+from django.shortcuts import get_object_or_404
+from apps.monetization.models import SpendEvent
+from apps.account.models import CustomUser
+
 class MonetizationApply(APIView):
     permission_classes = [IsAuthenticated]
 

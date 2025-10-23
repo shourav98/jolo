@@ -68,6 +68,11 @@ class UserProfile(models.Model):
     flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
 
+    # New fields for chat functionality
+    welcome_message = models.TextField(blank=True, null=True, help_text="Auto-reply welcome message for creators")
+    auto_translate = models.BooleanField(default=True, help_text="Auto-translate messages")
+    is_online = models.BooleanField(default=False)
+    last_online = models.DateTimeField(default=timezone.now)
     # Monetization Application
     id_proof = models.FileField(upload_to="id_proofs/%Y/%m/%d/", blank=True, null=True)
     intro_video = models.FileField(upload_to="intro_videos/%Y/%m/%d/", blank=True, null=True)
