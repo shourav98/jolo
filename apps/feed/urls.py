@@ -16,4 +16,7 @@ urlpatterns = [
 
     path("stories/", views.StoryView.as_view(), name="stories"),
 
+    path("story/<int:story_id>/delete/", views.StoryItemDeleteView.as_view()),
+
+
 ]
