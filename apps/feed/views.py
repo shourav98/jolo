@@ -321,3 +321,37 @@ class StoryView(APIView):
         if deleted:
             return api_response(message="Story deleted successfully.", status_code=204)
         return api_response(success=False, message="No story found.", status_code=404)
+
+
+
+
+
+class StoryItemDeleteView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, story_id):
+        profile = request.user.profile
+
+        try:
+            # Only delete if the logged-in user owns this story item
+            story_item = StoryItem.objects.get(id=story_id, story__profile=profile)
+        except StoryItem.DoesNotExist:
+            return api_response(
+                success=False,
+                message="Story item not found or not owned by you.",
+                status_code=404,
+            )
+
+        story_item.delete()
+
+        # If story has no more items, delete the story itself
+        if not story_item.story.items.exists():
+            story_item.story.delete()
+
+        return api_response(
+            success=True,
+            data={},
+            message="Story item deleted successfully.",
+            status_code=204
+        )
+
