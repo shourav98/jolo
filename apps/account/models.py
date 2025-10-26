@@ -57,6 +57,9 @@ class UserProfile(models.Model):
     profile_photo = models.ImageField(
         upload_to="profile_photos/%Y/%m/%d/", blank=True, null=True
     )
+    cover_photo = models.ImageField(  
+        upload_to="cover_photos/%Y/%m/%d/", blank=True, null=True
+    )
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     street_address = models.CharField(max_length=255, blank=True, null=True)
