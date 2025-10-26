@@ -61,9 +61,17 @@ class FeedListCreateView(APIView):
         serializer = FeedSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             feed = serializer.save(profile=request.user.profile)
-            files = request.FILES.getlist("files")
-            for f in files:
-                FeedFile.objects.create(feed=feed, file=f)
+
+            # ✅ handle separate uploads
+            image_files = request.FILES.getlist("image")
+            video_files = request.FILES.getlist("video")
+
+            for img in image_files:
+                FeedFile.objects.create(feed=feed, file=img, file_type="image")
+
+            for vid in video_files:
+                FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+
             return api_response(
                 message="Feed created successfully.",
                 data=FeedSerializer(feed, context={"request": request}).data,
