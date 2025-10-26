@@ -342,16 +342,26 @@ class StoryItemDeleteView(APIView):
                 status_code=404,
             )
 
+        deleted_story_id = story_item.story.id
+        story_item_id = story_item.id
+
         story_item.delete()
 
         # If story has no more items, delete the story itself
-        if not story_item.story.items.exists():
-            story_item.story.delete()
+        story_deleted = False
+        if not StoryItem.objects.filter(story_id=deleted_story_id).exists():
+            Story.objects.filter(id=deleted_story_id).delete()
+            story_deleted = True
 
         return api_response(
             success=True,
-            data={},
             message="Story item deleted successfully.",
-            status_code=204
+            data={
+                "story_item_id": story_item_id,
+                "story_deleted": story_deleted,
+                "story_id": deleted_story_id,
+            },
+            status_code=200,  # ✅ Always return 200 OK
         )
+
 
