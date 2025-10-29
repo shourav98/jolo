@@ -168,11 +168,21 @@ class CommentDetailView(APIView):
     def delete(self, request, pk):
         comment = get_object_or_404(Comment, id=pk, comment_by=request.user.profile)
         feed = comment.content_object
+        comment_id = comment.id
+        feed_id = feed.id if hasattr(feed, "id") else None
+
+        # Delete comment and update feed stats safely
         comment.delete()
         if hasattr(feed, "total_comment") and feed.total_comment > 0:
             feed.total_comment -= 1
             feed.save(update_fields=["total_comment"])
-        return api_response(message="Comment deleted successfully.", status_code=204)
+
+        return api_response(
+            success=True,
+            message="Comment deleted successfully.",
+            data={"comment_id": comment_id, "feed_id": feed_id},
+            status_code=200  
+        )
 
 
 
