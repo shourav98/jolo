@@ -61,9 +61,17 @@ class FeedListCreateView(APIView):
         serializer = FeedSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             feed = serializer.save(profile=request.user.profile)
-            files = request.FILES.getlist("files")
-            for f in files:
-                FeedFile.objects.create(feed=feed, file=f)
+
+            # ✅ handle separate uploads
+            image_files = request.FILES.getlist("image")
+            video_files = request.FILES.getlist("video")
+
+            for img in image_files:
+                FeedFile.objects.create(feed=feed, file=img, file_type="image")
+
+            for vid in video_files:
+                FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+
             return api_response(
                 message="Feed created successfully.",
                 data=FeedSerializer(feed, context={"request": request}).data,
@@ -317,10 +325,25 @@ class StoryView(APIView):
 
     def delete(self, request):
         profile = request.user.profile
-        deleted, _ = Story.objects.filter(profile=profile).delete()
-        if deleted:
-            return api_response(message="Story deleted successfully.", status_code=204)
-        return api_response(success=False, message="No story found.", status_code=404)
+        story = Story.objects.filter(profile=profile).first()
+
+        if not story:
+            return api_response(
+                success=False,
+                message="No story found for this user.",
+                status_code=404
+            )
+
+        story_id = story.id
+        story.delete()
+
+        return api_response(
+            success=True,
+            message="Story deleted successfully.",
+            data={"story_id": story_id},
+            status_code=200  
+        )
+
 
 
 
@@ -342,16 +365,26 @@ class StoryItemDeleteView(APIView):
                 status_code=404,
             )
 
+        deleted_story_id = story_item.story.id
+        story_item_id = story_item.id
+
         story_item.delete()
 
         # If story has no more items, delete the story itself
-        if not story_item.story.items.exists():
-            story_item.story.delete()
+        story_deleted = False
+        if not StoryItem.objects.filter(story_id=deleted_story_id).exists():
+            Story.objects.filter(id=deleted_story_id).delete()
+            story_deleted = True
 
         return api_response(
             success=True,
-            data={},
             message="Story item deleted successfully.",
-            status_code=204
+            data={
+                "story_item_id": story_item_id,
+                "story_deleted": story_deleted,
+                "story_id": deleted_story_id,
+            },
+            status_code=200,  # ✅ Always return 200 OK
         )
+
 

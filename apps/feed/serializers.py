@@ -19,11 +19,11 @@ class FeedFileSerializer(serializers.ModelSerializer):
 
 #  FEED SERIALIZER 
 class FeedSerializer(serializers.ModelSerializer):
-    
     author_name = serializers.CharField(source="profile.user.name", read_only=True)
     author_id = serializers.IntegerField(source="profile.user.id", read_only=True)
     author_photo = serializers.SerializerMethodField()
-    files = FeedFileSerializer(many=True, read_only=True)
+    images = serializers.SerializerMethodField()  # ✅
+    videos = serializers.SerializerMethodField()  # ✅
     is_unlocked = serializers.SerializerMethodField()
 
     class Meta:
@@ -41,25 +41,27 @@ class FeedSerializer(serializers.ModelSerializer):
             "total_comment",
             "total_view",
             "created_at",
-            "files",
+            "images",   # ✅
+            "videos",   # ✅
         ]
-        read_only_fields = (
-            "id",
-            "total_like",
-            "total_comment",
-            "total_view",
-            "created_at",
-        )
+        read_only_fields = ("id", "total_like", "total_comment", "total_view", "created_at")
 
-    # - computed helpers 
     def get_author_photo(self, obj):
         prof = getattr(obj.profile, "profile_photo", None)
         if prof:
             request = self.context.get("request")
-            if request:
-                return request.build_absolute_uri(prof.url)
-            return prof.url
+            return request.build_absolute_uri(prof.url) if request else prof.url
         return None
+
+    def get_images(self, obj):
+        request = self.context.get("request")
+        images = obj.files.filter(file_type="image")
+        return [request.build_absolute_uri(f.file.url) for f in images] if request else [f.file.url for f in images]
+
+    def get_videos(self, obj):
+        request = self.context.get("request")
+        videos = obj.files.filter(file_type="video")
+        return [request.build_absolute_uri(f.file.url) for f in videos] if request else [f.file.url for f in videos]
 
     def get_is_unlocked(self, obj):
         request = self.context.get("request")
@@ -68,17 +70,6 @@ class FeedSerializer(serializers.ModelSerializer):
             return obj.status != "locked"
         return obj.is_unlocked_for(user)
 
-    def to_representation(self, instance):
-      
-        rep = super().to_representation(instance)
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-
-        # If locked and viewer not unlocked, blank content & hide files
-        if instance.status == "locked" and not instance.is_unlocked_for(user):
-            rep["content"] = None
-            rep["files"] = []
-        return rep
 
 
 #  COMMENT SERIALIZER 

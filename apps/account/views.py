@@ -7,6 +7,8 @@ from django.conf import settings
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import CustomUser, OTPVerification
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser, FormParser
+
 from django.core.cache import cache
 import uuid
 from .serializers import (
@@ -67,10 +69,11 @@ class LoginView(APIView):
 # Profile
 class ProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  
 
     def get(self, request):
         profile = request.user.profile
-        serializer = ProfileSerializer(profile)
+        serializer = ProfileSerializer(profile, context={"request": request})
         return Response({
             "status": 200,
             "success": True,
@@ -79,7 +82,7 @@ class ProfileView(APIView):
 
     def put(self, request):
         profile = request.user.profile
-        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        serializer = ProfileSerializer(profile, data=request.data, partial=True, context={"request": request})
         if serializer.is_valid():
             serializer.save()
             full_name = request.data.get('full_name')
@@ -92,7 +95,11 @@ class ProfileView(APIView):
                 "message": "Profile updated successfully",
                 "data": serializer.data
             })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "status": 400,
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Forgot Password Flow
@@ -143,11 +150,11 @@ class ForgotPasswordOTPVerifyView(APIView):
             otp_obj.is_used = True
             otp_obj.save()
 
-            # ✅ Generate reset token
+            # Generate reset token
             reset_token = str(uuid.uuid4())
 
-            # ✅ Store token in cache (key=token, value=user_id)
-            cache.set(reset_token, user.id, timeout=300)  # 5 min validity
+            # Store token in cache (key=token, value=user_id)
+            cache.set(reset_token, user.id, timeout=300)  
 
             return Response({
                 "status": 200,
@@ -174,7 +181,7 @@ class ForgotPasswordResetView(APIView):
         if new_password != confirm_password:
             return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Get user_id from cache
+        # Get user_id from cache
         user_id = cache.get(reset_token)
         if not user_id:
             return Response({"error": "Invalid or expired reset token"}, status=status.HTTP_400_BAD_REQUEST)
@@ -184,11 +191,11 @@ class ForgotPasswordResetView(APIView):
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # ✅ Reset password
+        #  Reset password
         user.set_password(new_password)
         user.save()
 
-        # ✅ Delete used token
+        # Delete used token
         cache.delete(reset_token)
 
         return Response({

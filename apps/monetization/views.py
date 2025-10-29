@@ -18,7 +18,9 @@ from .serializers import (
     PayoutRequestSerializer, MonetizationStatusSerializer
 )
 from .services import can_earn
-
+from django.shortcuts import get_object_or_404
+from apps.monetization.models import SpendEvent
+from apps.account.models import CustomUser
 
 
 #  Unified API Response Helper
@@ -40,32 +42,45 @@ def api_response(success=True, message="Success", data=None, status_code=200):
 #  Monetization Apply / Status / Approve
 
 
-from django.shortcuts import get_object_or_404
-from apps.monetization.models import SpendEvent
-from apps.account.models import CustomUser
+
 
 class MonetizationApply(APIView):
+   
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        monet, created = CreatorMonetization.objects.get_or_create(user=request.user)
+        user = request.user
+        monet, _ = CreatorMonetization.objects.get_or_create(user=user)
 
+        # 🔹 Prevent duplicate applications
         if monet.status in (MonetizationStatus.PENDING, MonetizationStatus.ACTIVE):
             return api_response(
-                message="Already applied or approved.",
-                data={"status": monet.status}
+                success=False,
+                message="You have already applied or are already monetized.",
+                data={"status": monet.status},
+                status_code=400
             )
 
+        # 🔹 File validation
         id_proof = request.FILES.get("id_proof")
         intro_video = request.FILES.get("intro_video")
         profile_photo = request.FILES.get("profile_photo")
 
         if not id_proof or not intro_video:
-            return api_response(success=False, message="ID proof and intro video are required.", status_code=400)
+            return api_response(
+                success=False,
+                message="Both ID proof and Intro video are required.",
+                status_code=400
+            )
 
-        profile = request.user.profile
+        profile = user.profile
+        # Save uploaded profile photo if missing
         if not profile.profile_photo and not profile_photo:
-            return api_response(success=False, message="Profile photo required if not already set.", status_code=400)
+            return api_response(
+                success=False,
+                message="Profile photo required if not already set.",
+                status_code=400
+            )
 
         if profile_photo:
             profile.profile_photo = profile_photo
@@ -74,29 +89,47 @@ class MonetizationApply(APIView):
         profile.intro_video = intro_video
         profile.save(update_fields=["profile_photo", "id_proof", "intro_video"])
 
+        #  Handle payout account
         bank_name = request.data.get("bank_name")
         account_holder_name = request.data.get("account_holder_name")
         account_number = request.data.get("account_number")
 
-        if not all([bank_name, account_holder_name, account_number]):
-            return api_response(success=False, message="Bank account details are required.", status_code=400)
+        default_account = PayoutAccount.objects.filter(user=user, is_default=True).first()
 
-        PayoutAccount.objects.update_or_create(
-            user=request.user,
-            defaults={
-                "bank_name": bank_name,
-                "account_holder_name": account_holder_name,
-                "account_number": account_number,
-                "is_default": True,
-            },
-        )
+        #  If user has no payout account, require details
+        if not default_account and not all([bank_name, account_holder_name, account_number]):
+            return api_response(
+                success=False,
+                message="Bank account details are required before applying for monetization.",
+                status_code=400
+            )
 
+        #  If new details provided, create or update default payout account
+        if all([bank_name, account_holder_name, account_number]):
+            PayoutAccount.objects.update_or_create(
+                user=user,
+                defaults={
+                    "bank_name": bank_name,
+                    "account_holder_name": account_holder_name,
+                    "account_number": account_number,
+                    "is_default": True,
+                },
+            )
+
+        # Mark monetization as pending
         monet.status = MonetizationStatus.PENDING
         monet.applied_at = timezone.now()
         monet.save(update_fields=["status", "applied_at"])
 
-        return api_response(message="Application submitted successfully.", data={"status": monet.status}, status_code=201)
-
+        return api_response(
+            success=True,
+            message="Monetization application submitted successfully.",
+            data={
+                "status": monet.status,
+                "applied_at": monet.applied_at
+            },
+            status_code=201
+        )
 
 class MonetizationStatusView(APIView):
     permission_classes = [IsAuthenticated]
@@ -131,21 +164,115 @@ class MonetizationApproveView(APIView):
 
 
 class VaultView(APIView):
+    """
+    Unified Vault API
+    - Shows User Vault if user is not monetized
+    - Shows Creator Vault if user is monetized
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        wallet, _ = Wallet.objects.get_or_create(user=request.user)
-        purchases = CoinPurchase.objects.filter(user=request.user).order_by("-created_at")[:30]
+        user = request.user
+        wallet, _ = Wallet.objects.get_or_create(user=user)
+
+        # ──────────────── IF CREATOR (Monetized) ────────────────
+        if hasattr(user, "monetization") and user.monetization.status == MonetizationStatus.ACTIVE:
+            # ✅ Creator Vault
+            qs = SpendEvent.objects.filter(creator=user)
+            coins_total = qs.aggregate(total=Sum("coins_spent"))["total"] or 0
+            usd_total = Decimal(coins_total) * COIN_VALUE_USD
+
+            # Category breakdown
+            category = {
+                row["service"]: row["coins"]
+                for row in qs.values("service").annotate(coins=Sum("coins_spent"))
+            }
+
+            now = timezone.now()
+            week_since = now - timezone.timedelta(days=7)
+            month_since = now - timezone.timedelta(days=30)
+            year_since = now - timezone.timedelta(days=365)
+
+            def build_trend(qs, field):
+                return [{field: str(r[field]), "usd": str(r["usd"])} for r in qs]
+
+            weekly = qs.filter(created_at__gte=week_since).extra(select={"day": "date(created_at)"}).values("day").annotate(usd=Sum("usd_creator"))
+            monthly = qs.filter(created_at__gte=month_since).extra(select={"day": "date(created_at)"}).values("day").annotate(usd=Sum("usd_creator"))
+            yearly = qs.filter(created_at__gte=year_since).extra(select={"month": "strftime('%%Y-%%m', created_at)"}).values("month").annotate(usd=Sum("usd_creator"))
+
+            quick_trend = {
+                "weekly": build_trend(weekly, "day"),
+                "monthly": build_trend(monthly, "day"),
+                "yearly": build_trend(yearly, "month"),
+            }
+
+            # Top services
+            def service_percent(days):
+                since = now - timezone.timedelta(days=days)
+                total = qs.filter(created_at__gte=since).aggregate(t=Sum("coins_spent"))["t"] or 0
+                if not total:
+                    return {}
+                data = qs.filter(created_at__gte=since).values("service").annotate(total=Sum("coins_spent"))
+                return {r["service"]: round((r["total"] / total) * 100, 1) for r in data}
+
+            top_services = {
+                "daily": service_percent(1),
+                "weekly": service_percent(7),
+                "monthly": service_percent(30),
+            }
+
+            # Top fans
+            from apps.feed.models import TopFan
+            profile = getattr(user, "profile", None)
+            top_fans = [
+                {"name": tf.fan.user.name if hasattr(tf.fan, "user") else tf.fan.name, "coins": tf.score}
+                for tf in TopFan.objects.filter(creator=profile or user.profile).order_by("-score")[:5]
+            ]
+
+            data = {
+                "mode": "creator",
+                "total_coins": coins_total,
+                "usd_value": f"{usd_total:.2f}",
+                "category": category,
+                "quick_trend": quick_trend,
+                "top_services": top_services,
+                "top_fans": top_fans,
+            }
+
+            return api_response(
+                success=True,
+                message="Creator Vault analytics fetched successfully.",
+                data=data,
+                status_code=200
+            )
+
+        # ──────────────── ELSE: USER VAULT ────────────────
+        purchases = CoinPurchase.objects.filter(user=user).order_by("-created_at")[:30]
         since = timezone.now() - timezone.timedelta(days=30)
-        spent = SpendEvent.objects.filter(fan=request.user, created_at__gte=since).values("service").annotate(total=Sum("coins_spent"))
-        return api_response(data={
+        spent = (
+            SpendEvent.objects.filter(fan=user, created_at__gte=since)
+            .values("service")
+            .annotate(total=Sum("coins_spent"))
+        )
+        quick_stats = {x["service"]: x["total"] for x in spent if x["total"] > 0}
+
+        data = {
+            "mode": "user",
             "wallet_name": "The Vault",
             "token_name": "Whysper Coins",
             "balance": wallet.balance,
             "balance_usd": f"{Decimal(wallet.balance) * COIN_VALUE_USD:.2f}",
-            "quick_stats": {x["service"]: x["total"] for x in spent},
-            "history": CoinPurchaseSerializer(purchases, many=True).data
-        })
+            "quick_stats": quick_stats,
+            "history": CoinPurchaseSerializer(purchases, many=True).data,
+        }
+
+        return api_response(
+            success=True,
+            message="User Vault data fetched successfully.",
+            data=data,
+            status_code=200
+        )
+
 
 
 
@@ -217,30 +344,8 @@ def stripe_webhook(request):
 
 
 
-#  Creator Vault + Payout
+#  Creator + Payout
 
-
-class CreatorVault(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        if not can_earn(request.user):
-            return api_response(success=False, message="Not monetized yet.", status_code=403)
-        qs = SpendEvent.objects.filter(creator=request.user)
-        coins_total = qs.aggregate(t=Sum("coins_spent"))["t"] or 0
-        usd_total = (Decimal(coins_total) * COIN_VALUE_USD)
-        by_service = {r["service"]: r["coins"] for r in qs.values("service").annotate(coins=Sum("coins_spent"))}
-        week_since = timezone.now() - timezone.timedelta(days=7)
-        last_week = (qs.filter(created_at__gte=week_since)
-                       .extra(select={"d": "date(created_at)"})
-                       .values("d").annotate(usd=Sum("usd_creator")).order_by("d"))
-        trend = [{"day": r["d"], "usd": str(r["usd"])} for r in last_week]
-        return api_response(data={
-            "total_coins": coins_total,
-            "usd_value": f"{usd_total:.2f}",
-            "category": by_service,
-            "weekly_trend": trend
-        })
 
 
 class PayoutEligibility(APIView):
