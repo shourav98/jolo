@@ -325,10 +325,25 @@ class StoryView(APIView):
 
     def delete(self, request):
         profile = request.user.profile
-        deleted, _ = Story.objects.filter(profile=profile).delete()
-        if deleted:
-            return api_response(message="Story deleted successfully.", status_code=204)
-        return api_response(success=False, message="No story found.", status_code=404)
+        story = Story.objects.filter(profile=profile).first()
+
+        if not story:
+            return api_response(
+                success=False,
+                message="No story found for this user.",
+                status_code=404
+            )
+
+        story_id = story.id
+        story.delete()
+
+        return api_response(
+            success=True,
+            message="Story deleted successfully.",
+            data={"story_id": story_id},
+            status_code=200  
+        )
+
 
 
 
