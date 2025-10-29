@@ -16,7 +16,7 @@ urlpatterns = [
     path("stripe/webhook/",      views.stripe_webhook),
 
     # Creator vault & payout
-    path("creator/vault/",               views.CreatorVault.as_view()),
+    # path("creator/vault/",               views.CreatorVault.as_view()),
     path("creator/payout/eligibility/",  views.PayoutEligibility.as_view()),
     path("creator/payout/request/",      views.RequestPayout.as_view()),
 
