@@ -98,8 +98,15 @@ class FeedDetailView(APIView):
 
     def delete(self, request, pk):
         feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        feed_id = feed.id
         feed.delete()
-        return api_response(message="Feed deleted successfully.", status_code=204)
+        return api_response(
+            success=True,
+            message="Feed deleted successfully.",
+            data={"feed_id": feed_id},
+            status_code=200  
+        )
+
 
 
 
