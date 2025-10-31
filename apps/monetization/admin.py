@@ -53,7 +53,7 @@ def approve_selected(modeladmin, request, queryset):
             CreatorProfile.objects.get_or_create(user=obj.user)
 
             msg = (
-                "🎉 Congrats! Your Whyspers monetization has been approved. "
+                " Congrats! Your Whyspers monetization has been approved. "
                 "You can now start earning, post locked content, and withdraw funds from your Vault."
             )
             phone = getattr(obj.user, "phone", None)
@@ -73,7 +73,7 @@ class CreatorMonetizationAdmin(ModelAdmin):
     list_display = ("user", "status", "applied_at", "approved_at", "reviewed_by")
     list_filter = ("status",)
     search_fields = ("user__name", "user__phone")
-    readonly_fields = ("applied_at", "approved_at", "payout_info")
+    readonly_fields = ("applied_at", "approved_at", "payout_info", "id_proof_link", "intro_video_link")
     actions = [approve_selected]
     date_hierarchy = "applied_at"
     list_per_page = 50
@@ -83,18 +83,37 @@ class CreatorMonetizationAdmin(ModelAdmin):
             "fields": ("user", "status", "reviewed_by", "admin_notes")
         }),
         ("Verification Files", {
-            "fields": ("id_proof", "intro_video")
+            "fields": ("id_proof_link", "id_proof", "intro_video_link", "intro_video")
         }),
         ("Payout Account Info", {
             "fields": ("payout_info",)
         }),
     )
 
-    # 🔹 Read-only payout info (display all linked accounts)
+    # 🔹 Show clickable file links in admin
+    def id_proof_link(self, obj):
+        if obj.id_proof:
+            return format_html(
+                '<a href="{}" target="_blank">📄 View ID Proof</a>',
+                obj.id_proof.url
+            )
+        return "—"
+    id_proof_link.short_description = "ID Proof (View)"
+
+    def intro_video_link(self, obj):
+        if obj.intro_video:
+            return format_html(
+                '<a href="{}" target="_blank">🎬 View Intro Video</a>',
+                obj.intro_video.url
+            )
+        return "—"
+    intro_video_link.short_description = "Intro Video (View)"
+
+    # Read-only payout info (display all linked accounts)
     def payout_info(self, obj):
         accounts = PayoutAccount.objects.filter(user=obj.user)
         if not accounts.exists():
-            return "❌ No payout accounts found."
+            return "No payout accounts found."
         html = "<ul style='margin:0;padding-left:20px;'>"
         for acc in accounts:
             url = f"/admin/monetization/payoutaccount/{acc.id}/change/"
@@ -102,7 +121,7 @@ class CreatorMonetizationAdmin(ModelAdmin):
                 f"<li><a href='{url}' target='_blank'>"
                 f"<strong>{acc.bank_name}</strong></a> — {acc.account_holder_name} "
                 f"(<code>{acc.account_number}</code>) "
-                f"{'✅ Default' if acc.is_default else ''}</li>"
+                f"{'Default' if acc.is_default else ''}</li>"
             )
         html += "</ul>"
         return format_html(html)
