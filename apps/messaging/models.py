@@ -81,8 +81,7 @@ class Message(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     coins_used = models.IntegerField(default=0)  # New field for coins used
-    # document_file = models.FileField(upload_to='documents/', null=True, blank=True, validators=[FileExtensionValidator(['pdf', 'docx', 'txt'])])  # For document messages
-    voice_file = models.FileField(upload_to='voices/', null=True, blank=True, validators=[FileExtensionValidator(['mp3', 'wav'])])  # For voice chat
+    document_file = models.FileField(upload_to='documents/', null=True, blank=True, validators=[FileExtensionValidator(['mp4', 'jpg', 'png', 'jpeg', 'gif', 'webp'])])
 
     class Meta:
         ordering = ['created_at']  # Add this line
