@@ -6,6 +6,8 @@ from rest_framework import status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import timedelta
 from django.utils import timezone
+from apps.monetization.models import CreatorTier
+
 
 from apps.feed.models import (
     Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
@@ -42,6 +44,7 @@ class FeedListCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
+        """List feeds visible to current user."""
         user = request.user
         if not user.is_authenticated:
             feeds = Feed.objects.filter(status="public").order_by("-created_at")
@@ -51,33 +54,47 @@ class FeedListCreateView(APIView):
             feeds = Feed.objects.filter(
                 models.Q(status="public")
                 | models.Q(profile=profile)
-                | models.Q(status="friends", profile__in=following_profiles)
+                | models.Q(status="followers", profile__in=following_profiles)
             ).distinct().order_by("-created_at")
 
         serializer = FeedSerializer(feeds, many=True, context={"request": request})
         return api_response(data=serializer.data)
 
     def post(self, request):
+        """Create a new feed post."""
         serializer = FeedSerializer(data=request.data, context={"request": request})
-        if serializer.is_valid():
-            feed = serializer.save(profile=request.user.profile)
+        if not serializer.is_valid():
+            return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
 
-            # ✅ handle separate uploads
-            image_files = request.FILES.getlist("image")
-            video_files = request.FILES.getlist("video")
+        # Create feed
+        feed = serializer.save(profile=request.user.profile)
 
-            for img in image_files:
-                FeedFile.objects.create(feed=feed, file=img, file_type="image")
+        # Automatically set unlock_price if it's a locked post
+        if feed.status == "locked":
+            tier = getattr(request.user.creator_profile, "tier", CreatorTier.SILVER)
+            tier_prices = {
+                CreatorTier.SILVER: 500,
+                CreatorTier.GOLD: 500,
+                CreatorTier.PLATINUM: 750,
+                CreatorTier.DIAMOND: 1000,
+            }
+            feed.unlock_price = tier_prices.get(tier, 500)
+            feed.save(update_fields=["unlock_price"])
 
-            for vid in video_files:
-                FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+        # ✅ Handle image/video uploads
+        image_files = request.FILES.getlist("image")
+        video_files = request.FILES.getlist("video")
 
-            return api_response(
-                message="Feed created successfully.",
-                data=FeedSerializer(feed, context={"request": request}).data,
-                status_code=201
-            )
-        return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+        for img in image_files:
+            FeedFile.objects.create(feed=feed, file=img, file_type="image")
+        for vid in video_files:
+            FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+
+        return api_response(
+            message="Feed created successfully.",
+            data=FeedSerializer(feed, context={"request": request}).data,
+            status_code=201
+        )
 
 
 class FeedDetailView(APIView):
