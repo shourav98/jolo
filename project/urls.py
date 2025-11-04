@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/', include('apps.feed.urls')),
     path("api/", include("apps.monetization.urls")),
     path("api/", include("apps.messaging.urls")),
+    path("api/notifications/", include("apps.notification.urls")),
     # path("api/", include("apps.chatting_app.urls")),
 ]
 

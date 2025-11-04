@@ -145,6 +145,10 @@ class MonetizationStatusView(APIView):
         return api_response(data=data)
 
 
+
+# -----------------------
+# Monetization Approve (10% cut)
+# -----------------------
 class MonetizationApproveView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -153,17 +157,42 @@ class MonetizationApproveView(APIView):
 
         user = CustomUser.objects.get(id=user_id)
         monet, _ = CreatorMonetization.objects.get_or_create(user=user)
+        wallet, _ = Wallet.objects.get_or_create(user=user)
 
+        #  active  skip
+        if monet.status == MonetizationStatus.ACTIVE:
+            return api_response(message=f"{user.name} is already a Creator.")
+
+        # Approve monetization
         monet.status = MonetizationStatus.ACTIVE
         monet.approved_at = timezone.now()
         monet.reviewed_by = request.user
         monet.save(update_fields=["status", "approved_at", "reviewed_by"])
 
+        # 10% cut + 90% 
+        total_coins = int(wallet.balance or 0)
+        platform_cut = int(total_coins * Decimal("0.10"))
+        creator_earning = max(total_coins - platform_cut, 0)
+
+        wallet.balance = creator_earning
+        wallet.save(update_fields=["balance"])
+        wallet.refresh_from_db()  #  Ensure latest value
+
+        # Creator profile flag
         CreatorProfile.objects.get_or_create(user=user)
         user.profile.is_creator = True
         user.profile.save(update_fields=["is_creator"])
 
-        return api_response(message=f"{user.name} approved as Creator.")
+        return api_response(
+            success=True,
+            message=f"{user.name} is now a Creator. 10% platform cut applied successfully.",
+            data={
+                "platform_cut": platform_cut,
+                "creator_earning": creator_earning,
+                "final_balance": wallet.balance,
+            },
+            status_code=200
+        )
 
 
 # -----------------------
@@ -173,24 +202,26 @@ class VaultView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-
     def get(self, request):
         user = request.user
         wallet, _ = Wallet.objects.get_or_create(user=user)
+        wallet.refresh_from_db()  # always get latest wallet balance
 
         # ──────────────── CREATOR VAULT ────────────────
         if hasattr(user, "monetization") and user.monetization.status == MonetizationStatus.ACTIVE:
             qs = SpendEvent.objects.filter(creator=user)
-            coins_total = qs.aggregate(total=Sum("coins_spent"))["total"] or 0
+            coins_from_spend = qs.aggregate(total=Sum("coins_spent"))["total"] or 0
+
+            #no earning use wallet.balance 
+            coins_total = coins_from_spend if coins_from_spend > 0 else int(wallet.balance)
             usd_total = Decimal(coins_total) * COIN_VALUE_USD
 
-            # Category breakdown (service → coins)
+            # Category breakdown
             category = {
                 row["service"]: row["coins"]
                 for row in qs.values("service").annotate(coins=Sum("coins_spent"))
             }
 
-            # UI-friendly labels
             category_labels = {
                 "chat": "Messages",
                 "tip": "Tips",
@@ -199,16 +230,17 @@ class VaultView(APIView):
                 "video": "Videos",
             }
 
-            # Map to labels & ensure defaults
             category = {category_labels.get(k, k): v for k, v in category.items()}
             for label in category_labels.values():
                 category.setdefault(label, 0)
 
-            # ─── Time-based analytics
             now = timezone.now()
             week_since = now - timezone.timedelta(days=7)
             month_since = now - timezone.timedelta(days=30)
             year_since = now - timezone.timedelta(days=365)
+
+            def build_trend(qs_values, field):
+                return [{field: str(r[field]), "usd": str(r["usd"])} for r in qs_values]
 
             weekly = (
                 qs.filter(created_at__gte=week_since)
@@ -234,16 +266,12 @@ class VaultView(APIView):
                 .order_by("month")
             )
 
-            def build_trend(qs_values, field):
-                return [{field: str(r[field]), "usd": str(r["usd"])} for r in qs_values]
-
             quick_trend = {
                 "weekly": build_trend(weekly, "day"),
                 "monthly": build_trend(monthly, "day"),
                 "yearly": build_trend(yearly, "month"),
             }
 
-            # ─── Top services
             def service_percent(days):
                 since = now - timezone.timedelta(days=days)
                 total = qs.filter(created_at__gte=since).aggregate(t=Sum("coins_spent"))["t"] or 0
@@ -258,14 +286,12 @@ class VaultView(APIView):
                 "monthly": service_percent(30),
             }
 
-            # ─── Top fans
             profile = getattr(user, "profile", None)
             top_fans = [
                 {"name": tf.fan.user.name if hasattr(tf.fan, "user") else tf.fan.name, "coins": tf.score}
                 for tf in TopFan.objects.filter(creator=profile or user.profile).order_by("-score")[:5]
             ]
 
-            # ─── Final creator data
             data = {
                 "mode": "creator",
                 "total_coins": coins_total,
@@ -294,19 +320,14 @@ class VaultView(APIView):
         )
 
         quick_stats = {x["service"]: x["total"] for x in spent if x["total"] > 0}
-
         quick_stats_renamed = {}
-        for key, value in quick_stats.items():
-            if key == "tip":
-                quick_stats_renamed["gifts"] = value
-            else:
-                quick_stats_renamed[key] = value
 
-        #  Ensure default categories always exist
+        for key, value in quick_stats.items():
+            quick_stats_renamed["gifts" if key == "tip" else key] = value
+
         for key in ["chat", "gifts"]:
             quick_stats_renamed.setdefault(key, 0)
 
-        # ─── Final user data
         data = {
             "mode": "user",
             "wallet_name": "The Vault",
@@ -336,16 +357,29 @@ class PackageList(APIView):
         return api_response(data=CoinPackageSerializer(packs, many=True).data)
 
 
+# -----------------------
+# Stripe Purchase Restriction
+# -----------------------
 class CreateStripeCheckout(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Prevent creators from buying packages
+        monet = getattr(request.user, "monetization", None)
+        if monet and monet.status == MonetizationStatus.ACTIVE:
+            return api_response(
+                success=False,
+                message="Creators cannot purchase coin packages.",
+                status_code=403
+            )
+
         pack_id = request.data.get("package_id")
         if not pack_id:
             return api_response(success=False, message="package_id required.", status_code=400)
-        pkg = CoinPackage.objects.get(id=pack_id)
 
+        pkg = CoinPackage.objects.get(id=pack_id)
         stripe.api_key = settings.STRIPE_SECRET_KEY
+
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             mode="payment",
@@ -364,6 +398,9 @@ class CreateStripeCheckout(APIView):
         return api_response(message="Checkout session created.", data={"url": session.url})
 
 
+# -----------------------
+# Stripe Webhook 
+# -----------------------
 @csrf_exempt
 def stripe_webhook(request):
     payload = request.body
@@ -381,7 +418,6 @@ def stripe_webhook(request):
             user = CustomUser.objects.get(id=user_id)
             pkg = CoinPackage.objects.get(id=package_id)
         except Exception:
-            # Acknowledge but skip if metadata/user/pkg missing
             return HttpResponse(status=200)
 
         CoinPurchase.objects.get_or_create(
@@ -395,8 +431,8 @@ def stripe_webhook(request):
             }
         )
         user.wallet.add(pkg.coins)
-    return HttpResponse(status=200)
 
+    return HttpResponse(status=200)
 
 # -----------------------
 # Creator + Payout
