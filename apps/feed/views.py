@@ -305,6 +305,47 @@ class MyTopCreatorsView(APIView):
 
 
 
+
+class MyTopFanListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        creator = request.user.profile
+        fans = TopFan.objects.filter(creator=creator, status="active").order_by("-score")
+        serializer = TopFanSerializer(fans, many=True, context={"request": request})
+        
+        data = {
+            "total_fans": fans.count(),
+            "fans": serializer.data
+        }
+        return api_response(
+            success=True,
+            message="TopFan list fetched successfully.",
+            data=data,
+            status_code=200
+        )
+
+
+
+class TopFanDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, fan_id):
+        creator = request.user.profile
+        try:
+            topfan = TopFan.objects.get(creator=creator, fan__id=fan_id)
+        except TopFan.DoesNotExist:
+            return api_response(success=False, message="Fan not found in your top list.", status_code=404)
+
+        serializer = TopFanSerializer(topfan, context={"request": request})
+        return api_response(
+            success=True,
+            message="TopFan details fetched successfully.",
+            data=serializer.data,
+            status_code=200
+        )
+
+
 # STORY CRUD (24h Story)
 
 class StoryView(APIView):
@@ -418,7 +459,7 @@ class StoryItemDeleteView(APIView):
                 "story_deleted": story_deleted,
                 "story_id": deleted_story_id,
             },
-            status_code=200,  # ✅ Always return 200 OK
+            status_code=200,  
         )
 
 

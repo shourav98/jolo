@@ -22,7 +22,10 @@ from .serializers import (
 )
 from .services import can_earn
 from apps.account.models import CustomUser
-from apps.feed.models import TopFan 
+from apps.feed.models import TopFan
+
+
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 # -----------------------
@@ -167,7 +170,9 @@ class MonetizationApproveView(APIView):
 # Vault (User/Creator)
 # -----------------------
 class VaultView(APIView):
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
+
 
     def get(self, request):
         user = request.user
