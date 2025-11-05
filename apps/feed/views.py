@@ -6,6 +6,8 @@ from rest_framework import status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import timedelta
 from django.utils import timezone
+from apps.monetization.models import CreatorTier
+
 
 from apps.feed.models import (
     Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
@@ -42,6 +44,7 @@ class FeedListCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
+        """List feeds visible to current user."""
         user = request.user
         if not user.is_authenticated:
             feeds = Feed.objects.filter(status="public").order_by("-created_at")
@@ -51,25 +54,47 @@ class FeedListCreateView(APIView):
             feeds = Feed.objects.filter(
                 models.Q(status="public")
                 | models.Q(profile=profile)
-                | models.Q(status="friends", profile__in=following_profiles)
+                | models.Q(status="followers", profile__in=following_profiles)
             ).distinct().order_by("-created_at")
 
         serializer = FeedSerializer(feeds, many=True, context={"request": request})
         return api_response(data=serializer.data)
 
     def post(self, request):
+        """Create a new feed post."""
         serializer = FeedSerializer(data=request.data, context={"request": request})
-        if serializer.is_valid():
-            feed = serializer.save(profile=request.user.profile)
-            files = request.FILES.getlist("files")
-            for f in files:
-                FeedFile.objects.create(feed=feed, file=f)
-            return api_response(
-                message="Feed created successfully.",
-                data=FeedSerializer(feed, context={"request": request}).data,
-                status_code=201
-            )
-        return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+        if not serializer.is_valid():
+            return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+
+        # Create feed
+        feed = serializer.save(profile=request.user.profile)
+
+        # Automatically set unlock_price if it's a locked post
+        if feed.status == "locked":
+            tier = getattr(request.user.creator_profile, "tier", CreatorTier.SILVER)
+            tier_prices = {
+                CreatorTier.SILVER: 500,
+                CreatorTier.GOLD: 500,
+                CreatorTier.PLATINUM: 750,
+                CreatorTier.DIAMOND: 1000,
+            }
+            feed.unlock_price = tier_prices.get(tier, 500)
+            feed.save(update_fields=["unlock_price"])
+
+        # ✅ Handle image/video uploads
+        image_files = request.FILES.getlist("image")
+        video_files = request.FILES.getlist("video")
+
+        for img in image_files:
+            FeedFile.objects.create(feed=feed, file=img, file_type="image")
+        for vid in video_files:
+            FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+
+        return api_response(
+            message="Feed created successfully.",
+            data=FeedSerializer(feed, context={"request": request}).data,
+            status_code=201
+        )
 
 
 class FeedDetailView(APIView):
@@ -90,8 +115,15 @@ class FeedDetailView(APIView):
 
     def delete(self, request, pk):
         feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        feed_id = feed.id
         feed.delete()
-        return api_response(message="Feed deleted successfully.", status_code=204)
+        return api_response(
+            success=True,
+            message="Feed deleted successfully.",
+            data={"feed_id": feed_id},
+            status_code=200  
+        )
+
 
 
 
@@ -160,11 +192,21 @@ class CommentDetailView(APIView):
     def delete(self, request, pk):
         comment = get_object_or_404(Comment, id=pk, comment_by=request.user.profile)
         feed = comment.content_object
+        comment_id = comment.id
+        feed_id = feed.id if hasattr(feed, "id") else None
+
+        # Delete comment and update feed stats safely
         comment.delete()
         if hasattr(feed, "total_comment") and feed.total_comment > 0:
             feed.total_comment -= 1
             feed.save(update_fields=["total_comment"])
-        return api_response(message="Comment deleted successfully.", status_code=204)
+
+        return api_response(
+            success=True,
+            message="Comment deleted successfully.",
+            data={"comment_id": comment_id, "feed_id": feed_id},
+            status_code=200  
+        )
 
 
 
@@ -263,6 +305,47 @@ class MyTopCreatorsView(APIView):
 
 
 
+
+class MyTopFanListView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        creator = request.user.profile
+        fans = TopFan.objects.filter(creator=creator, status="active").order_by("-score")
+        serializer = TopFanSerializer(fans, many=True, context={"request": request})
+        
+        data = {
+            "total_fans": fans.count(),
+            "fans": serializer.data
+        }
+        return api_response(
+            success=True,
+            message="TopFan list fetched successfully.",
+            data=data,
+            status_code=200
+        )
+
+
+
+class TopFanDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, fan_id):
+        creator = request.user.profile
+        try:
+            topfan = TopFan.objects.get(creator=creator, fan__id=fan_id)
+        except TopFan.DoesNotExist:
+            return api_response(success=False, message="Fan not found in your top list.", status_code=404)
+
+        serializer = TopFanSerializer(topfan, context={"request": request})
+        return api_response(
+            success=True,
+            message="TopFan details fetched successfully.",
+            data=serializer.data,
+            status_code=200
+        )
+
+
 # STORY CRUD (24h Story)
 
 class StoryView(APIView):
@@ -317,10 +400,25 @@ class StoryView(APIView):
 
     def delete(self, request):
         profile = request.user.profile
-        deleted, _ = Story.objects.filter(profile=profile).delete()
-        if deleted:
-            return api_response(message="Story deleted successfully.", status_code=204)
-        return api_response(success=False, message="No story found.", status_code=404)
+        story = Story.objects.filter(profile=profile).first()
+
+        if not story:
+            return api_response(
+                success=False,
+                message="No story found for this user.",
+                status_code=404
+            )
+
+        story_id = story.id
+        story.delete()
+
+        return api_response(
+            success=True,
+            message="Story deleted successfully.",
+            data={"story_id": story_id},
+            status_code=200  
+        )
+
 
 
 
@@ -342,16 +440,26 @@ class StoryItemDeleteView(APIView):
                 status_code=404,
             )
 
+        deleted_story_id = story_item.story.id
+        story_item_id = story_item.id
+
         story_item.delete()
 
         # If story has no more items, delete the story itself
-        if not story_item.story.items.exists():
-            story_item.story.delete()
+        story_deleted = False
+        if not StoryItem.objects.filter(story_id=deleted_story_id).exists():
+            Story.objects.filter(id=deleted_story_id).delete()
+            story_deleted = True
 
         return api_response(
             success=True,
-            data={},
             message="Story item deleted successfully.",
-            status_code=204
+            data={
+                "story_item_id": story_item_id,
+                "story_deleted": story_deleted,
+                "story_id": deleted_story_id,
+            },
+            status_code=200,  
         )
+
 

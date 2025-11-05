@@ -23,13 +23,13 @@ ALLOWED_HOSTS = ['*']
 INSTALLED_APPS = [
     "daphne",
     "unfold",  # before django.contrib.admin
-    "unfold.contrib.filters",  # optional, if special filters are needed
-    "unfold.contrib.forms",  # optional, if special form elements are needed
-    "unfold.contrib.inlines",  # optional, if special inlines are needed
-    "unfold.contrib.import_export",  # optional, if django-import-export package is used
-    "unfold.contrib.guardian",  # optional, if django-guardian package is used
-    "unfold.contrib.simple_history",  # optional, if django-simple-history package is used
-    "unfold.contrib.location_field",  # optional, if django-location-field package is used
+    "unfold.contrib.filters",  
+    "unfold.contrib.forms",  
+    "unfold.contrib.inlines",  
+    "unfold.contrib.import_export",  
+    "unfold.contrib.guardian",  
+    "unfold.contrib.simple_history",  
+    "unfold.contrib.location_field",  
     "unfold.contrib.constance",
     # Django default apps
     'django.contrib.admin',
@@ -50,10 +50,9 @@ INSTALLED_APPS = [
     'apps.account',
     'apps.feed.apps.FeedConfig',
     'apps.messaging',
+    'apps.monetization',
+    'apps.notification'
     # 'apps.chatting_app',
-
-
-    'apps.monetization'
 ]
 
 MIDDLEWARE = [
@@ -85,7 +84,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'project.wsgi.application'
+#WSGI_APPLICATION = 'project.wsgi.application'
 ASGI_APPLICATION = 'project.asgi.application'
 
 
@@ -156,6 +155,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+	'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication'
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -163,6 +164,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'project.custom_exception.custom_exception_handler',
     
 }
+
+
 
 ###################################
 #   SIMPLE JWT CONFIG
@@ -186,7 +189,9 @@ AUTH_USER_MODEL = 'account.CustomUser'
 #   CORS
 ###################################
 # CORS_ALLOW_ALL_ORIGINS = True
-
+CSRF_TRUSTED_ORIGINS = [
+	'https://jolo.softvencealpha.com'
+]
 
 # Logging configuration
 LOGGING = {

@@ -94,16 +94,22 @@ class Feed(models.Model):
 
 
 class FeedFile(models.Model):
-    
+    FILE_TYPE_CHOICES = (
+        ("image", "Image"),
+        ("video", "Video"),
+    )
+
     feed = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="files")
     file = models.FileField(upload_to="feed/files/%Y/%m/%d/")
+    file_type = models.CharField(max_length=10, choices=FILE_TYPE_CHOICES)  
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("created_at",)
 
     def __str__(self):
-        return f"File for Feed #{self.feed_id}"
+        return f"{self.file_type.title()} for Feed #{self.feed_id}"
+
     
 
 

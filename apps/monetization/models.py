@@ -102,19 +102,6 @@ class Wallet(models.Model):
         return f"{self.user.name} • Vault: {self.balance}c"
 
 
-    """Single source of truth for coin balance."""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wallet")
-    balance = models.PositiveIntegerField(default=0)  # coins
-    updated_at = models.DateTimeField(auto_now=True)
-    def add(self, coins:int):
-        self.balance += int(coins); self.save(update_fields=["balance","updated_at"])
-    def spend(self, coins:int):
-        coins = int(coins)
-        if self.balance < coins: raise ValueError("Insufficient Vault balance")
-        self.balance -= coins; self.save(update_fields=["balance","updated_at"])
-    def __str__(self): return f"{self.user.name} • Vault: {self.balance}c"
-
-
 class PurchaseMethod(models.TextChoices):
     STRIPE    = "stripe", "Stripe"
     APPLE_PAY = "apple_pay", "Apple Pay"

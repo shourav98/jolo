@@ -71,6 +71,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = [
             'full_name',
             'profile_photo',
+            'cover_photo',
             'gender',
             'date_of_birth',
             'street_address',
