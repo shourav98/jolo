@@ -119,55 +119,81 @@ class MessagesAPIView(APIView):
         
         if serializer.is_valid():
             try:
+                # Determine service type based on uploaded files
+                has_document = serializer.validated_data.get('document_file') is not None
+
+                if has_document:
+                    # Check file extension to determine if it's photo or video
+                    file_name = serializer.validated_data['document_file'].name.lower()
+                    if file_name.endswith(('.mp4', 'video')):
+                        service_type = "video"
+                    else:
+                        service_type = "photo"
+                else:
+                    service_type = "chat"
+
                 message_data = {
                     'session': chat_session,
                     'sender': request.user,
-                    'content': serializer.validated_data['content']
+                    'content': serializer.validated_data.get('content', ''),
+                    'document_file': serializer.validated_data.get('document_file')
                 }
-                
+
                 # Check if this is the first message in the chat
                 is_first_message_in_chat = not chat_session.messages.exists()
-                
+
                 coins_used = 0
-                
+
                 # FIRST MESSAGE LOGIC: Anyone can send first message for free
                 if is_first_message_in_chat:
                     # First message is always free, regardless of who sends it
                     coins_used = 0
-                    
+
                     # If creator sends first message, activate free window for fan's response
                     if request.user == chat_session.creator:
                         chat_session.activate_free_window()
-                
+
                 # SUBSEQUENT MESSAGES LOGIC
                 else:
                     is_first_message_from_this_user = not chat_session.messages.filter(sender=request.user).exists()
-                    
-                    # Fan pays if:
-                    # 1. Outside free window AND
-                    # 2. Not their first message in this chat AND  
-                    # 3. Not a creator (creators always message free)
-                    if (request.user == chat_session.fan and 
-                        not chat_session.is_free_window_active() and
-                        not is_first_message_from_this_user):
-                        
-                        # Get creator tier and coin cost
+
+                    # Media messages (photo/video) always cost coins, even during free window
+                    if has_document:
+                        # Get creator tier and coin cost for the service type
                         creator_profile = chat_session.creator.creator_profile
-                        coins_used = self.get_chat_cost(creator_profile.tier)
-                        
+                        coins_used = self.get_chat_cost(creator_profile.tier, service_type)
+
                         # Deduct coins
                         from apps.messaging.services import spend_coins
                         spend_coins(
                             fan=request.user,
                             creator=chat_session.creator,
-                            service="chat",
+                            service=service_type,
                             coins=coins_used
                         )
-                    
+
+                    # Text messages follow free window logic
+                    elif (request.user == chat_session.fan and
+                          not chat_session.is_free_window_active() and
+                          not is_first_message_from_this_user):
+
+                        # Get creator tier and coin cost
+                        creator_profile = chat_session.creator.creator_profile
+                        coins_used = self.get_chat_cost(creator_profile.tier, service_type)
+
+                        # Deduct coins
+                        from apps.messaging.services import spend_coins
+                        spend_coins(
+                            fan=request.user,
+                            creator=chat_session.creator,
+                            service=service_type,
+                            coins=coins_used
+                        )
+
                     # If creator replies, activate free window for fan
                     if request.user == chat_session.creator:
                         chat_session.activate_free_window()
-                
+
                 message_data['coins_used'] = coins_used
                 message = Message.objects.create(**message_data)
                 
@@ -188,14 +214,9 @@ class MessagesAPIView(APIView):
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    def get_chat_cost(self, tier):
-        tier_costs = {
-            "silver": 10,
-            "gold": 10,
-            "platinum": 15,
-            "diamond": 20
-        }
-        return tier_costs.get(tier, 10)
+    def get_chat_cost(self, tier, service_type="chat"):
+        from apps.messaging.services import get_message_cost
+        return get_message_cost(tier, service_type)
     
     def handle_auto_translation(self, user, message):
         """Handle auto-translation safely"""

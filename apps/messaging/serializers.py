@@ -41,14 +41,14 @@ class MessageSerializer(serializers.ModelSerializer):
     reactions = MessageReactionSerializer(many=True, read_only=True)
     can_react = serializers.SerializerMethodField()
     coins_used = serializers.IntegerField(read_only=True) 
-    # voice_file = serializers.FileField(read_only=True)  # Returns URL for Flutter download
+    document_file = serializers.FileField(read_only=True)  # Returns URL for Flutter download
     
     class Meta:
         model = Message
         fields = [
             'id', 'session', 'sender', 'sender_name', 'sender_profile_photo',
             'content', 'translated_content', 'coins_used',
-            'created_at', 'is_read', 'reactions', 'can_react'
+            'created_at', 'is_read', 'reactions', 'can_react', 'document_file',
         ]
     
     def get_sender_profile_photo(self, obj):
@@ -104,47 +104,63 @@ class ChatSessionSerializer(serializers.ModelSerializer):
 class CreateMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
-        fields = ['content']
+        fields = ['content', 'document_file']
     
     def validate(self, data):
         session = self.context['session']
         user = self.context['request'].user
-        
+
         # Check if user is part of this chat session
         if user not in [session.creator, session.fan]:
             raise serializers.ValidationError("You are not part of this chat session")
-        
-        # Check if this is NOT the first message and fan is sending outside free window
-        if session.messages.exists():  # Not first message
+
+        # Check if creator has monetization active (required for paid messages)
+        if not hasattr(session.creator, 'monetization') or session.creator.monetization.status != 'active':
+            raise serializers.ValidationError("Creator is not monetized")
+
+        # Determine service type for validation
+        has_document = data.get('document_file') is not None
+
+        if has_document:
+            file_name = data['document_file'].name.lower()
+            if file_name.endswith(('.mp4', 'video')):
+                service_type = "video"
+            else:
+                service_type = "photo"
+        else:
+            service_type = "chat"
+
+        # For media messages, always check balance since they always cost
+        if has_document:
+            fan_wallet = user.wallet
+            creator_tier = session.creator.creator_profile.tier
+            coin_cost = self.get_chat_cost(creator_tier, service_type)
+
+            if fan_wallet.balance < coin_cost:
+                raise serializers.ValidationError("Insufficient coins")
+
+        # For text messages, check balance only if not first message and outside free window
+        elif session.messages.exists():  # Not first message
             is_first_message_from_this_user = not session.messages.filter(sender=user).exists()
-            
-            if (user == session.fan and 
-                session.free_window_until and 
+
+            if (user == session.fan and
+                session.free_window_until and
                 timezone.now() > session.free_window_until and
                 not is_first_message_from_this_user):  # Not their first message
-                
-                # Check if creator has monetization active
-                if not hasattr(session.creator, 'monetization') or session.creator.monetization.status != 'active':
-                    raise serializers.ValidationError("Creator is not monetized")
-                
+
                 # Check fan's wallet balance
                 fan_wallet = user.wallet
                 creator_tier = session.creator.creator_profile.tier
-                coin_cost = self.get_chat_cost(creator_tier)
-                
+                coin_cost = self.get_chat_cost(creator_tier, service_type)
+
                 if fan_wallet.balance < coin_cost:
                     raise serializers.ValidationError("Insufficient coins")
-        
+
         return data
     
-    def get_chat_cost(self, tier):
-        tier_costs = {
-            "silver": 10,
-            "gold": 10,
-            "platinum": 15,
-            "diamond": 20
-        }
-        return tier_costs.get(tier, 10)
+    def get_chat_cost(self, tier, service_type="chat"):
+        from apps.messaging.services import get_message_cost
+        return get_message_cost(tier, service_type)
 
 class ReactionSerializer(serializers.ModelSerializer):
     class Meta:

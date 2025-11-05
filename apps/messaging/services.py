@@ -68,25 +68,36 @@ def spend_coins(fan, creator, service, coins):
 def update_engagement_score(creator):
     """
     Update creator's engagement score based on paid messages in the last 7 days
-    +1 point for every paid message received
+    +1 point for every paid chat message received
+    +5 points for every paid photo/video message received
     """
     if not hasattr(creator, 'creator_profile'):
         return
-    
+
     week_ago = timezone.now() - timedelta(days=7)
-    
-    # Count paid chat messages in the last 7 days
-    paid_messages_count = SpendEvent.objects.filter(
+
+    # Count paid chat messages in the last 7 days (+1 point each)
+    paid_chat_messages_count = SpendEvent.objects.filter(
         creator=creator,
         created_at__gte=week_ago,
         service="chat"
     ).count()
-    
-    # Update engagement score (1 point per paid message as per requirements)
+
+    # Count paid photo/video messages in the last 7 days (+5 points each)
+    paid_media_messages_count = SpendEvent.objects.filter(
+        creator=creator,
+        created_at__gte=week_ago,
+        service__in=["photo", "video"]
+    ).count()
+
+    # Calculate total engagement score
+    total_score = (paid_chat_messages_count * 1) + (paid_media_messages_count * 5)
+
+    # Update engagement score
     creator_profile = creator.creator_profile
-    creator_profile.engagement_score = paid_messages_count
+    creator_profile.engagement_score = total_score
     creator_profile.save()
-    
+
     # Check and update tier based on engagement score
     update_creator_tier(creator_profile)
 
@@ -132,17 +143,33 @@ def can_send_free_message(session, user):
         
     return False
 
-def get_message_cost(creator_tier):
+def get_message_cost(creator_tier, service_type="chat"):
     """
-    Get cost for sending a message based on creator tier
+    Get cost for sending a message based on creator tier and service type
     """
     tier_costs = {
-        "silver": 10,
-        "gold": 10,
-        "platinum": 15,
-        "diamond": 20
+        "silver": {
+            "chat": 10,
+            "photo": 50,
+            "video": 100
+        },
+        "gold": {
+            "chat": 10,
+            "photo": 50,
+            "video": 100
+        },
+        "platinum": {
+            "chat": 15,
+            "photo": 75,
+            "video": 150
+        },
+        "diamond": {
+            "chat": 20,
+            "photo": 100,
+            "video": 200
+        }
     }
-    return tier_costs.get(creator_tier, 10)
+    return tier_costs.get(creator_tier, {}).get(service_type, 10)
 
 def calculate_revenue_split(coins_spent, creator_tier):
     """

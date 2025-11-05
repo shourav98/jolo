@@ -44,7 +44,7 @@ class CustomUserAdmin(UserAdmin, ModelAdmin):
     inlines = [UserProfileInline]
 
     # Displayed columns
-    list_display = ("phone", "name", "is_staff", "is_active" , "id")
+    list_display = ("id", "phone", "name", "is_staff", "is_active" , "id")
     list_filter = ("is_staff", "is_active", "is_superuser")
     search_fields = ("phone", "name")
     ordering = ("phone",)
