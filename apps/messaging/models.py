@@ -6,6 +6,8 @@ import uuid
 
 from django.core.validators import FileExtensionValidator
 
+from django.utils.timesince import timesince
+
 class ChatSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     creator = models.ForeignKey(
@@ -108,6 +110,12 @@ class UserActivity(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='activity')
     last_online = models.DateTimeField(default=timezone.now)
     is_online = models.BooleanField(default=False)
+
+
+    def get_last_seen_display(self):
+        if self.is_online:
+            return "Online"
+        return f"Last seen {timesince(self.last_online)} ago"
     
     def __str__(self):
         return f"{self.user.name} - {'Online' if self.is_online else 'Offline'}"
