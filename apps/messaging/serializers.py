@@ -13,10 +13,18 @@ class UserSerializer(serializers.ModelSerializer):
     profile_photo = serializers.SerializerMethodField()
     is_online = serializers.SerializerMethodField()
     expertise = serializers.CharField(source='profile.expertise', read_only=True)
+
+    last_online = serializers.DateTimeField(source='activity.last_online', read_only=True)
+    last_seen_display = serializers.SerializerMethodField()
+
+    def get_last_seen_display(self, obj):
+        if hasattr(obj, 'activity'):
+            return obj.activity.get_last_seen_display()
+        return "Offline"
     
     class Meta:
         model = CustomUser
-        fields = ['id', 'name', 'phone', 'profile_photo', 'is_online', 'expertise']
+        fields = ['id', 'name', 'phone', 'profile_photo', 'is_online', 'last_online', 'last_seen_display', 'expertise']
     
     def get_profile_photo(self, obj):
         if hasattr(obj, 'profile') and obj.profile.profile_photo:

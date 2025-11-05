@@ -84,7 +84,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'project.wsgi.application'
+#WSGI_APPLICATION = 'project.wsgi.application'
 ASGI_APPLICATION = 'project.asgi.application'
 
 
@@ -155,6 +155,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+	'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication'
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -162,6 +164,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'project.custom_exception.custom_exception_handler',
     
 }
+
+
 
 ###################################
 #   SIMPLE JWT CONFIG
@@ -185,7 +189,9 @@ AUTH_USER_MODEL = 'account.CustomUser'
 #   CORS
 ###################################
 # CORS_ALLOW_ALL_ORIGINS = True
-
+CSRF_TRUSTED_ORIGINS = [
+	'https://jolo.softvencealpha.com'
+]
 
 # Logging configuration
 LOGGING = {
