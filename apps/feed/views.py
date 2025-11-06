@@ -81,14 +81,37 @@ class FeedListCreateView(APIView):
             feed.unlock_price = tier_prices.get(tier, 500)
             feed.save(update_fields=["unlock_price"])
 
-        # ✅ Handle image/video uploads
+        # ✅ Handle image/video uploads to Cloudinary
         image_files = request.FILES.getlist("image")
         video_files = request.FILES.getlist("video")
 
+        import cloudinary.uploader
+
         for img in image_files:
-            FeedFile.objects.create(feed=feed, file=img, file_type="image")
+            cloudinary_result = cloudinary.uploader.upload(
+                img,
+                resource_type="auto",
+                folder="feed/images/"
+            )
+            FeedFile.objects.create(
+                feed=feed,
+                file=cloudinary_result['secure_url'],
+                file_public_id=cloudinary_result['public_id'],
+                file_type="image"
+            )
+
         for vid in video_files:
-            FeedFile.objects.create(feed=feed, file=vid, file_type="video")
+            cloudinary_result = cloudinary.uploader.upload(
+                vid,
+                resource_type="auto",
+                folder="feed/videos/"
+            )
+            FeedFile.objects.create(
+                feed=feed,
+                file=cloudinary_result['secure_url'],
+                file_public_id=cloudinary_result['public_id'],
+                file_type="video"
+            )
 
         return api_response(
             message="Feed created successfully.",
@@ -390,10 +413,18 @@ class StoryView(APIView):
         if not files:
             return api_response(success=False, message="No files uploaded.", status_code=400)
 
+        import cloudinary.uploader
+
         for f in files:
+            cloudinary_result = cloudinary.uploader.upload(
+                f,
+                resource_type="auto",
+                folder="stories/"
+            )
             StoryItem.objects.create(
                 story=story,
-                file=f,
+                file=cloudinary_result['secure_url'],
+                file_public_id=cloudinary_result['public_id'],
                 expired_at=timezone.now() + timedelta(hours=24),
             )
         return api_response(message="Story uploaded successfully.", status_code=201)

@@ -54,12 +54,13 @@ class UserProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
     )
-    profile_photo = models.ImageField(
-        upload_to="profile_photos/%Y/%m/%d/", blank=True, null=True
-    )
-    cover_photo = models.ImageField(  
-        upload_to="cover_photos/%Y/%m/%d/", blank=True, null=True
-    )
+    # profile_photo = models.ImageField(
+    #     upload_to="profile_photos/%Y/%m/%d/", blank=True, null=True
+    # )
+    profile_photo = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    profile_photo_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+    cover_photo = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    cover_photo_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     street_address = models.CharField(max_length=255, blank=True, null=True)
@@ -77,8 +78,10 @@ class UserProfile(models.Model):
     is_online = models.BooleanField(default=False)
     last_online = models.DateTimeField(default=timezone.now)
     # Monetization Application
-    id_proof = models.FileField(upload_to="id_proofs/%Y/%m/%d/", blank=True, null=True)
-    intro_video = models.FileField(upload_to="intro_videos/%Y/%m/%d/", blank=True, null=True)
+    id_proof = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    id_proof_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+    intro_video = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    intro_video_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
 
     def __str__(self):
         return f"{self.user.name}'s Profile"

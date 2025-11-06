@@ -82,15 +82,39 @@ class MonetizationApply(APIView):
                 status_code=400
             )
 
+        import cloudinary.uploader
+
         # Save profile photo on profile
         if profile_photo:
-            profile.profile_photo = profile_photo
-            profile.save(update_fields=["profile_photo"])
+            cloudinary_result = cloudinary.uploader.upload(
+                profile_photo,
+                resource_type="auto",
+                folder="profile_photos/"
+            )
+            profile.profile_photo = cloudinary_result['secure_url']
+            profile.profile_photo_public_id = cloudinary_result['public_id']
+            profile.save(update_fields=["profile_photo", "profile_photo_public_id"])
 
         # Save KYC artifacts on monetization model
-        monet.id_proof = id_proof
-        monet.intro_video = intro_video
-        monet.save(update_fields=["id_proof", "intro_video"])
+        if id_proof:
+            cloudinary_result = cloudinary.uploader.upload(
+                id_proof,
+                resource_type="auto",
+                folder="kyc/id_proofs/"
+            )
+            monet.id_proof = cloudinary_result['secure_url']
+            monet.id_proof_public_id = cloudinary_result['public_id']
+
+        if intro_video:
+            cloudinary_result = cloudinary.uploader.upload(
+                intro_video,
+                resource_type="auto",
+                folder="kyc/intro_videos/"
+            )
+            monet.intro_video = cloudinary_result['secure_url']
+            monet.intro_video_public_id = cloudinary_result['public_id']
+
+        monet.save(update_fields=["id_proof", "intro_video", "id_proof_public_id", "intro_video_public_id"])
 
         # Handle payout account
         bank_name = request.data.get("bank_name")
