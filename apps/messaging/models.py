@@ -83,7 +83,8 @@ class Message(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     coins_used = models.IntegerField(default=0)  # New field for coins used
-    document_file = models.FileField(upload_to='documents/', null=True, blank=True, validators=[FileExtensionValidator(['mp4', 'jpg', 'png', 'jpeg', 'gif', 'webp'])])
+    document_file = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    document_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
 
     class Meta:
         ordering = ['created_at']  # Add this line
@@ -106,16 +107,48 @@ class MessageReaction(models.Model):
     class Meta:
         unique_together = ['message', 'user']
 
+        
+
 class UserActivity(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='activity')
     last_online = models.DateTimeField(default=timezone.now)
     is_online = models.BooleanField(default=False)
-
-
-    def get_last_seen_display(self):
+    last_seen = models.DateTimeField(default=timezone.now)  # For more granular tracking
+    
+    # Add these methods for better online status management
+    def update_online_status(self):
+        """Update online status based on last activity"""
+        time_since_last_activity = timezone.now() - self.last_seen
+        self.is_online = time_since_last_activity < timedelta(minutes=5)  # 5 minutes threshold
+        self.save(update_fields=['is_online'])
+    
+    def mark_online(self):
+        """Mark user as currently online"""
+        self.is_online = True
+        self.last_seen = timezone.now()
+        self.last_online = timezone.now()
+        self.save(update_fields=['is_online', 'last_seen', 'last_online'])
+    
+    def mark_offline(self):
+        """Mark user as offline"""
+        self.is_online = False
+        self.last_online = timezone.now()
+        self.save(update_fields=['is_online', 'last_online'])
+    
+    def get_status_display(self):
+        """Get user status for display"""
         if self.is_online:
             return "Online"
-        return f"Last seen {timesince(self.last_online)} ago"
-    
+        
+        time_diff = timezone.now() - self.last_online
+        if time_diff < timedelta(minutes=1):
+            return "Just now"
+        elif time_diff < timedelta(hours=1):
+            return f"{int(time_diff.seconds / 60)} min ago"
+        elif time_diff < timedelta(days=1):
+            return f"{int(time_diff.seconds / 3600)} hours ago"
+        else:
+            return f"{time_diff.days} days ago"
+
     def __str__(self):
         return f"{self.user.name} - {'Online' if self.is_online else 'Offline'}"
