@@ -9,22 +9,20 @@ from rest_framework.pagination import PageNumberPagination
 class MessagePagination(PageNumberPagination):
     page_size = 50  # For long chat histories
 
+
 class UserSerializer(serializers.ModelSerializer):
     profile_photo = serializers.SerializerMethodField()
     is_online = serializers.SerializerMethodField()
+    online_status = serializers.SerializerMethodField()
+    last_seen = serializers.SerializerMethodField()
     expertise = serializers.CharField(source='profile.expertise', read_only=True)
 
-    last_online = serializers.DateTimeField(source='activity.last_online', read_only=True)
-    last_seen_display = serializers.SerializerMethodField()
-
-    def get_last_seen_display(self, obj):
-        if hasattr(obj, 'activity'):
-            return obj.activity.get_last_seen_display()
-        return "Offline"
-    
     class Meta:
         model = CustomUser
-        fields = ['id', 'name', 'phone', 'profile_photo', 'is_online', 'last_online', 'last_seen_display', 'expertise']
+        fields = [
+            'id', 'name', 'phone', 'profile_photo', 
+            'is_online', 'online_status', 'last_seen', 'expertise'
+        ]
     
     def get_profile_photo(self, obj):
         if hasattr(obj, 'profile') and obj.profile.profile_photo:
@@ -32,9 +30,28 @@ class UserSerializer(serializers.ModelSerializer):
         return None
     
     def get_is_online(self, obj):
+        """Check if user is currently online"""
         if hasattr(obj, 'activity'):
-            return obj.activity.is_online
+            # Consider user online if active in last 5 minutes
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            if obj.activity.is_online:
+                recent_threshold = timezone.now() - timedelta(minutes=5)
+                return obj.activity.last_seen >= recent_threshold
         return False
+    
+    def get_online_status(self, obj):
+        """Get formatted online status"""
+        if hasattr(obj, 'activity'):
+            return obj.activity.get_status_display()
+        return "Offline"
+    
+    def get_last_seen(self, obj):
+        """Get last seen timestamp"""
+        if hasattr(obj, 'activity'):
+            return obj.activity.last_seen
+        return None
 
 class MessageReactionSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.name', read_only=True)
@@ -49,7 +66,7 @@ class MessageSerializer(serializers.ModelSerializer):
     reactions = MessageReactionSerializer(many=True, read_only=True)
     can_react = serializers.SerializerMethodField()
     coins_used = serializers.IntegerField(read_only=True) 
-    document_file = serializers.FileField(read_only=True)  # Returns URL for Flutter download
+    document_file = serializers.URLField(read_only=True)  # Cloudinary URL
     
     class Meta:
         model = Message
@@ -110,6 +127,8 @@ class ChatSessionSerializer(serializers.ModelSerializer):
         return 0
 
 class CreateMessageSerializer(serializers.ModelSerializer):
+    document_file = serializers.FileField(required=False)  # Accept file upload
+
     class Meta:
         model = Message
         fields = ['content', 'document_file']
@@ -138,31 +157,8 @@ class CreateMessageSerializer(serializers.ModelSerializer):
         else:
             service_type = "chat"
 
-        # For media messages, always check balance since they always cost
-        if has_document:
-            fan_wallet = user.wallet
-            creator_tier = session.creator.creator_profile.tier
-            coin_cost = self.get_chat_cost(creator_tier, service_type)
-
-            if fan_wallet.balance < coin_cost:
-                raise serializers.ValidationError("Insufficient coins")
-
-        # For text messages, check balance only if not first message and outside free window
-        elif session.messages.exists():  # Not first message
-            is_first_message_from_this_user = not session.messages.filter(sender=user).exists()
-
-            if (user == session.fan and
-                session.free_window_until and
-                timezone.now() > session.free_window_until and
-                not is_first_message_from_this_user):  # Not their first message
-
-                # Check fan's wallet balance
-                fan_wallet = user.wallet
-                creator_tier = session.creator.creator_profile.tier
-                coin_cost = self.get_chat_cost(creator_tier, service_type)
-
-                if fan_wallet.balance < coin_cost:
-                    raise serializers.ValidationError("Insufficient coins")
+        # Skip balance validation here - we'll do it in the view after Cloudinary upload
+        # to avoid wasting upload resources on failed validations
 
         return data
     

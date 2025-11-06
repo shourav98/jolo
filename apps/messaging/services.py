@@ -143,6 +143,7 @@ def can_send_free_message(session, user):
         
     return False
 
+
 def get_message_cost(creator_tier, service_type="chat"):
     """
     Get cost for sending a message based on creator tier and service type
@@ -170,6 +171,34 @@ def get_message_cost(creator_tier, service_type="chat"):
         }
     }
     return tier_costs.get(creator_tier, {}).get(service_type, 10)
+
+# def get_message_cost(creator_tier, service_type="chat"):
+#     """
+#     Get cost for sending a message based on creator tier and service type
+#     """
+#     tier_costs = {
+#         "silver": {
+#             "chat": 10,
+#             "photo": 50,
+#             "video": 100
+#         },
+#         "gold": {
+#             "chat": 10,
+#             "photo": 50,
+#             "video": 100
+#         },
+#         "platinum": {
+#             "chat": 15,
+#             "photo": 75,
+#             "video": 150
+#         },
+#         "diamond": {
+#             "chat": 20,
+#             "photo": 100,
+#             "video": 200
+#         }
+#     }
+#     return tier_costs.get(creator_tier, {}).get(service_type, 10)
 
 def calculate_revenue_split(coins_spent, creator_tier):
     """

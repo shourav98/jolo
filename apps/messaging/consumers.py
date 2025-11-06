@@ -9,6 +9,84 @@ from django.conf import settings
 import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
+from asgiref.sync import sync_to_async
+
+
+
+class OnlineStatusConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.user = self.scope["user"]
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+
+        self.online_group_name = "online_users"
+        
+        # Join online users group
+        await self.channel_layer.group_add(
+            self.online_group_name,
+            self.channel_name
+        )
+        
+        # Mark user as online
+        await self.mark_user_online(self.user)
+        
+        # Broadcast user online status
+        await self.channel_layer.group_send(
+            self.online_group_name,
+            {
+                "type": "user_online_status",
+                "user_id": self.user.id,
+                "is_online": True,
+                "username": self.user.name
+            }
+        )
+        
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'user') and self.user.is_authenticated:
+            # Mark user as offline
+            await self.mark_user_offline(self.user)
+            
+            # Broadcast user offline status
+            await self.channel_layer.group_send(
+                self.online_group_name,
+                {
+                    "type": "user_online_status",
+                    "user_id": self.user.id,
+                    "is_online": False,
+                    "username": self.user.name
+                }
+            )
+            
+            # Leave group
+            await self.channel_layer.group_discard(
+                self.online_group_name,
+                self.channel_name
+            )
+
+    async def user_online_status(self, event):
+        """Receive online status updates"""
+        await self.send(text_data=json.dumps({
+            "type": "online_status",
+            "user_id": event["user_id"],
+            "is_online": event["is_online"],
+            "username": event["username"]
+        }))
+
+    @database_sync_to_async
+    def mark_user_online(self, user):
+        from .models import UserActivity
+        activity, created = UserActivity.objects.get_or_create(user=user)
+        activity.mark_online()
+
+    @database_sync_to_async
+    def mark_user_offline(self, user):
+        from .models import UserActivity
+        activity = UserActivity.objects.filter(user=user).first()
+        if activity:
+            activity.mark_offline()
 
 def _resolve_redis_url_from_settings():
     """
@@ -201,6 +279,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def is_first_message_from_user(self, session, user):
         return not session.messages.filter(sender=user).exists()
+    
+
 
     @database_sync_to_async
     def spend_coins_and_create_message(self, session, user, content, coins_to_spend):
@@ -251,6 +331,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.info("Free window activated by creator response")
 
         return message
+
+
 
     @database_sync_to_async
     def create_free_message(self, session, user, content):

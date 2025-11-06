@@ -13,6 +13,7 @@ from .views import (
     TranslateMessageAPIView,
     AllwisperMessagesAPIView,
     ChatSessionMessagesAPIView,
+    OnlineUsersAPIView,
 
 )
 
@@ -24,11 +25,15 @@ urlpatterns = [
     path('chats/<uuid:session_id>/priority/', SendPriorityMessageAPIView.as_view(), name='priority-message'),
     path('messages/<uuid:message_id>/reaction/', AddReactionAPIView.as_view(), name='add-reaction'),
     path('messages/<uuid:message_id>/delete/', DeleteMessageAPIView.as_view(), name='delete-message'),
-    path('creators/online/', OnlineCreatorsAPIView.as_view(), name='online-creators'),
+    # path('creators/online/', OnlineCreatorsAPIView.as_view(), name='online-creators'),
     path('user/status/', UpdateUserStatusAPIView.as_view(), name='update-status'),
     path('chats/<uuid:session_id>/free-window/', CheckFreeWindowAPIView.as_view(), name='check-free-window'),
     path('messages/<uuid:message_id>/translate/', TranslateMessageAPIView.as_view(), name='translate-message'),
     path('allwisper/messages/', AllwisperMessagesAPIView.as_view(), name='allwisper-messages'),
 
     path('chat-sessions/<uuid:session_id>/all-messages/', ChatSessionMessagesAPIView.as_view(), name='chat-session-messages'),
+
+
+    path('online-users/', OnlineUsersAPIView.as_view(), name='online-users'),
+    path('online-creators/', OnlineCreatorsAPIView.as_view(), name='online-creators'),
 ]

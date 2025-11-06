@@ -36,10 +36,12 @@ class Wallet(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     last_purchase_at = models.DateTimeField(null=True, blank=True)
 
+
+
     @property
     def calculated_balance(self):
         """Calculate balance from coin lots (for verification)"""
-        return sum(lot.coins_remaining for lot in self.user.coin_lots.all())
+        return sum(lot.coins_remaining for lot in self.user.coin_lots.filter(coins_remaining__gt=0))
 
     def add(self, coins: int):
         coins = int(coins)
@@ -100,6 +102,71 @@ class Wallet(models.Model):
 
     def __str__(self):
         return f"{self.user.name} • Vault: {self.balance}c"
+
+    # @property
+    # def calculated_balance(self):
+    #     """Calculate balance from coin lots (for verification)"""
+    #     return sum(lot.coins_remaining for lot in self.user.coin_lots.all())
+
+    # def add(self, coins: int):
+    #     coins = int(coins)
+    #     # Create coin lot
+    #     CoinLot.objects.create(user=self.user, coins_granted=coins, coins_remaining=coins)
+    #     # Update the actual balance field
+    #     self.balance += coins
+    #     self.updated_at = timezone.now()
+    #     self.last_purchase_at = timezone.now()
+    #     self.save(update_fields=["balance", "updated_at", "last_purchase_at"])
+
+    # def spend(self, coins: int):
+    #     coins = int(coins)
+        
+    #     # Check if we have enough balance
+    #     if self.balance < coins:
+    #         raise ValueError("Insufficient Vault balance")
+        
+    #     # Update coin lots using FIFO
+    #     remaining = coins
+    #     for lot in self.user.coin_lots.filter(coins_remaining__gt=0).order_by('grant_ts'):
+    #         if remaining <= 0:
+    #             break
+                
+    #         spend_from_lot = min(remaining, lot.coins_remaining)
+    #         lot.coins_remaining -= spend_from_lot
+    #         lot.save(update_fields=['coins_remaining'])
+    #         remaining -= spend_from_lot
+        
+    #     # Update the actual balance field
+    #     self.balance -= coins
+    #     self.updated_at = timezone.now()
+    #     self.save(update_fields=["balance", "updated_at"])
+        
+    #     # Verify that calculated balance matches stored balance
+    #     calculated = self.calculated_balance
+    #     if calculated != self.balance:
+    #         logger.warning(f"Balance mismatch: stored={self.balance}, calculated={calculated}")
+    #         # Auto-correct the balance if there's a mismatch
+    #         self.balance = calculated
+    #         self.save(update_fields=["balance"])
+
+    # def expire_coins(self):
+    #     # Call via cron
+    #     expired_date = timezone.now() - timedelta(days=30)
+    #     expired_lots = self.user.coin_lots.filter(grant_ts__lt=expired_date, coins_remaining__gt=0)
+        
+    #     total_expired = 0
+    #     for lot in expired_lots:
+    #         total_expired += lot.coins_remaining
+    #         lot.coins_remaining = 0
+    #         lot.save()
+        
+    #     # Update balance if coins were expired
+    #     if total_expired > 0:
+    #         self.balance = max(0, self.balance - total_expired)
+    #         self.save(update_fields=["balance"])
+
+    # def __str__(self):
+    #     return f"{self.user.name} • Vault: {self.balance}c"
 
 
 class PurchaseMethod(models.TextChoices):
