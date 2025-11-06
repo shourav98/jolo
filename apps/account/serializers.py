@@ -65,6 +65,16 @@ class LoginSerializer(serializers.Serializer):
 class ProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='user.name', required=False)
     is_active = serializers.BooleanField(source='user.is_active', read_only=True)
+    profile_photo_file = serializers.FileField(required=False, write_only=True)
+    cover_photo_file = serializers.FileField(required=False, write_only=True)
+    id_proof_file = serializers.FileField(required=False, write_only=True)
+    intro_video_file = serializers.FileField(required=False, write_only=True)
+
+    # Read-only fields for displaying URLs
+    profile_photo = serializers.URLField(read_only=True)
+    cover_photo = serializers.URLField(read_only=True)
+    id_proof = serializers.URLField(read_only=True)
+    intro_video = serializers.URLField(read_only=True)
 
     class Meta:
         model = UserProfile
@@ -72,6 +82,12 @@ class ProfileSerializer(serializers.ModelSerializer):
             'full_name',
             'profile_photo',
             'cover_photo',
+            'profile_photo_file',
+            'cover_photo_file',
+            'id_proof',
+            'intro_video',
+            'id_proof_file',
+            'intro_video_file',
             'gender',
             'date_of_birth',
             'street_address',
@@ -83,6 +99,15 @@ class ProfileSerializer(serializers.ModelSerializer):
             'is_creator',
             'is_active',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Remove URL fields from input validation since they're handled in the view
+        if self.context.get('request') and self.context['request'].method in ['PUT', 'PATCH']:
+            self.fields.pop('profile_photo', None)
+            self.fields.pop('cover_photo', None)
+            self.fields.pop('id_proof', None)
+            self.fields.pop('intro_video', None)
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', None)

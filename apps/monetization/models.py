@@ -200,8 +200,10 @@ class CreatorMonetization(models.Model):
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name="monetization_reviews")
     # application artifacts
-    id_proof = models.FileField(upload_to="kyc/id_proofs/%Y/%m/%d/", null=True, blank=True)
-    intro_video = models.FileField(upload_to="kyc/intro_videos/%Y/%m/%d/", null=True, blank=True)
+    id_proof = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    id_proof_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+    intro_video = models.URLField(null=True, blank=True)  # Store Cloudinary URL
+    intro_video_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
     admin_notes = models.TextField(blank=True, null=True)
     def __str__(self): return f"{self.user.name} • {self.get_status_display()}"
 
