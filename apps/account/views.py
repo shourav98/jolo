@@ -82,24 +82,101 @@ class ProfileView(APIView):
 
     def put(self, request):
         profile = request.user.profile
+
+        # First, handle non-file fields
         serializer = ProfileSerializer(profile, data=request.data, partial=True, context={"request": request})
-        if serializer.is_valid():
-            serializer.save()
-            full_name = request.data.get('full_name')
-            if full_name:
-                request.user.name = full_name
-                request.user.save()
+        if not serializer.is_valid():
             return Response({
-                "status": 200,
-                "success": True,
-                "message": "Profile updated successfully",
-                "data": serializer.data
-            })
+                "status": 400,
+                "success": False,
+                "errors": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Save the profile with non-file fields first
+        profile = serializer.save()
+
+        # Handle Cloudinary uploads for profile photos and documents
+        profile_photo_file = request.FILES.get('profile_photo_file')
+        cover_photo_file = request.FILES.get('cover_photo_file')
+        id_proof_file = request.FILES.get('id_proof_file')
+        intro_video_file = request.FILES.get('intro_video_file')
+
+        import cloudinary.uploader
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"Files received - profile_photo: {profile_photo_file}, cover_photo: {cover_photo_file}, id_proof: {id_proof_file}, intro_video: {intro_video_file}")
+
+        try:
+            if profile_photo_file:
+                logger.info(f"Uploading profile photo: {profile_photo_file.name}")
+                cloudinary_result = cloudinary.uploader.upload(
+                    profile_photo_file,
+                    resource_type="auto",
+                    folder="profile_photos/"
+                )
+                profile.profile_photo = cloudinary_result['secure_url']
+                profile.profile_photo_public_id = cloudinary_result['public_id']
+                logger.info(f"Profile photo uploaded: {profile.profile_photo}")
+
+            if cover_photo_file:
+                logger.info(f"Uploading cover photo: {cover_photo_file.name}")
+                cloudinary_result = cloudinary.uploader.upload(
+                    cover_photo_file,
+                    resource_type="auto",
+                    folder="cover_photos/"
+                )
+                profile.cover_photo = cloudinary_result['secure_url']
+                profile.cover_photo_public_id = cloudinary_result['public_id']
+                logger.info(f"Cover photo uploaded: {profile.cover_photo}")
+
+            if id_proof_file:
+                logger.info(f"Uploading ID proof: {id_proof_file.name}")
+                cloudinary_result = cloudinary.uploader.upload(
+                    id_proof_file,
+                    resource_type="auto",
+                    folder="id_proofs/"
+                )
+                profile.id_proof = cloudinary_result['secure_url']
+                profile.id_proof_public_id = cloudinary_result['public_id']
+                logger.info(f"ID proof uploaded: {profile.id_proof}")
+
+            if intro_video_file:
+                logger.info(f"Uploading intro video: {intro_video_file.name}")
+                cloudinary_result = cloudinary.uploader.upload(
+                    intro_video_file,
+                    resource_type="auto",
+                    folder="intro_videos/"
+                )
+                profile.intro_video = cloudinary_result['secure_url']
+                profile.intro_video_public_id = cloudinary_result['public_id']
+                logger.info(f"Intro video uploaded: {profile.intro_video}")
+
+        except Exception as e:
+            logger.error(f"Cloudinary upload error: {str(e)}")
+            return Response({
+                "status": 500,
+                "success": False,
+                "message": f"File upload failed: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Save profile with Cloudinary URLs
+        profile.save()
+
+        # Update user name if provided
+        full_name = request.data.get('full_name')
+        if full_name:
+            request.user.name = full_name
+            request.user.save()
+
+        # Return updated data
+        response_serializer = ProfileSerializer(profile, context={"request": request})
         return Response({
-            "status": 400,
-            "success": False,
-            "errors": serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+            "status": 200,
+            "success": True,
+            "message": "Profile updated successfully",
+            "data": response_serializer.data
+        })
 
 
 # Forgot Password Flow
