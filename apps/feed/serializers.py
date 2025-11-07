@@ -49,10 +49,22 @@ class FeedSerializer(serializers.ModelSerializer):
     # Author photo
     def get_author_photo(self, obj):
         prof = getattr(obj.profile, "profile_photo", None)
-        if prof:
-            request = self.context.get("request")
-            return request.build_absolute_uri(prof.url) if request else prof.url
-        return None
+        if not prof:
+            return None
+
+        request = self.context.get("request")
+
+        # If the photo is a FileField (has .url)
+        if hasattr(prof, "url"):
+            url = prof.url
+        else:
+            # Already a string — could be Cloudinary or any absolute URL
+            url = str(prof)
+
+        # If URL is relative, build full absolute URI
+        if request and not url.startswith("http"):
+            return request.build_absolute_uri(url)
+        return url
 
     # Images
     def get_images(self, obj):
