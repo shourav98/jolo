@@ -26,9 +26,20 @@ class UserSerializer(serializers.ModelSerializer):
     
     def get_profile_photo(self, obj):
         if hasattr(obj, 'profile') and obj.profile.profile_photo:
-            return obj.profile.profile_photo.url
+            photo = obj.profile.profile_photo
+
+            # Handle Cloudinary, URL string, or FileField
+            if hasattr(photo, 'url'):
+                return photo.url
+            elif isinstance(photo, str):
+                # If already a full URL, return it
+                if photo.startswith('http'):
+                    return photo
+                # If Cloudinary public ID, convert to Cloudinary URL
+                from cloudinary.utils import cloudinary_url
+                return cloudinary_url(photo)[0]
         return None
-    
+        
     def get_is_online(self, obj):
         """Check if user is currently online"""
         if hasattr(obj, 'activity'):
@@ -78,9 +89,10 @@ class MessageSerializer(serializers.ModelSerializer):
     
     def get_sender_profile_photo(self, obj):
         if hasattr(obj.sender, 'profile') and obj.sender.profile.profile_photo:
-            return obj.sender.profile.profile_photo.url
+            photo = obj.sender.profile.profile_photo
+            return photo.url if hasattr(photo, 'url') else str(photo)
         return None
-    
+        
     def get_can_react(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
