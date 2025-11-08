@@ -51,7 +51,12 @@ class FeedSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_photo(self, obj):
-        return build_url(self.context.get("request"), getattr(obj.profile, "profile_photo", None))
+        photo = getattr(obj.profile, "profile_photo", None)
+        if photo:
+            from cloudinary.utils import cloudinary_url
+            url, _ = cloudinary_url(photo)
+            return url
+        return None
 
     def get_images(self, obj):
         request = self.context.get("request")
@@ -69,7 +74,7 @@ class FeedSerializer(serializers.ModelSerializer):
         for f in obj.files.filter(file_type="video"):
             if f.file:
                 from cloudinary.utils import cloudinary_url
-                url, _ = cloudinary_url(f.file)
+                url, _ = cloudinary_url(f.file, resource_type="video")
                 videos.append(url)
         return videos
 
@@ -96,7 +101,12 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = ["id", "user_name", "user_photo", "content", "created_at"]
 
     def get_user_photo(self, obj):
-        return build_url(self.context.get("request"), getattr(obj.comment_by, "profile_photo", None))
+        photo = getattr(obj.comment_by, "profile_photo", None)
+        if photo:
+            from cloudinary.utils import cloudinary_url
+            url, _ = cloudinary_url(photo)
+            return url
+        return None
 
 
 class TopFanSerializer(serializers.ModelSerializer):
@@ -109,7 +119,12 @@ class TopFanSerializer(serializers.ModelSerializer):
         fields = ["fan_id", "fan_name", "fan_photo", "score", "last_interacted"]
 
     def get_fan_photo(self, obj):
-        return build_url(self.context.get("request"), getattr(obj.fan, "profile_photo", None))
+        photo = getattr(obj.fan, "profile_photo", None)
+        if photo:
+            from cloudinary.utils import cloudinary_url
+            url, _ = cloudinary_url(photo)
+            return url
+        return None
     
 
 
