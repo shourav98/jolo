@@ -70,13 +70,35 @@ class FeedSerializer(serializers.ModelSerializer):
     def get_images(self, obj):
         request = self.context.get("request")
         images = obj.files.filter(file_type="image")
-        return [request.build_absolute_uri(f.file.url) for f in images] if request else [f.file.url for f in images]
+
+        urls = []
+        for f in images:
+            file_obj = f.file
+            # Handle both FileField and string URL
+            url = file_obj.url if hasattr(file_obj, "url") else str(file_obj)
+
+            # Build absolute URI only if it’s a relative path
+            if request and not url.startswith("http"):
+                url = request.build_absolute_uri(url)
+            urls.append(url)
+
+        return urls
 
     # Videos
     def get_videos(self, obj):
         request = self.context.get("request")
         videos = obj.files.filter(file_type="video")
-        return [request.build_absolute_uri(f.file.url) for f in videos] if request else [f.file.url for f in videos]
+
+        urls = []
+        for f in videos:
+            file_obj = f.file
+            url = file_obj.url if hasattr(file_obj, "url") else str(file_obj)
+
+            if request and not url.startswith("http"):
+                url = request.build_absolute_uri(url)
+            urls.append(url)
+
+        return urls
 
     # Unlocked Logic (clear & tier-safe)
     def get_is_unlocked(self, obj):
