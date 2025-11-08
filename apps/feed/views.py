@@ -17,6 +17,7 @@ from apps.feed.serializers import (
 )
 from apps.account.models import UserProfile
 from apps.monetization.services import spend_coins
+import cloudinary
 
 
 
@@ -85,30 +86,30 @@ class FeedListCreateView(APIView):
         image_files = request.FILES.getlist("image")
         video_files = request.FILES.getlist("video")
 
-        import cloudinary.uploader
-
         for img in image_files:
-            cloudinary_result = cloudinary.uploader.upload(
+            cloudinary_result = cloudinary.uploader.upload_large(
                 img,
                 resource_type="auto",
-                folder="feed/images/"
+                folder="feed/images/",
+                chunk_size=6000000  # 6MB chunks for large files
             )
             FeedFile.objects.create(
                 feed=feed,
-                file=cloudinary_result['secure_url'],
+                file=cloudinary_result['public_id'],
                 file_public_id=cloudinary_result['public_id'],
                 file_type="image"
             )
 
         for vid in video_files:
-            cloudinary_result = cloudinary.uploader.upload(
+            cloudinary_result = cloudinary.uploader.upload_large(
                 vid,
                 resource_type="auto",
-                folder="feed/videos/"
+                folder="feed/videos/",
+                chunk_size=6000000  # 6MB chunks for large files
             )
             FeedFile.objects.create(
                 feed=feed,
-                file=cloudinary_result['secure_url'],
+                file=cloudinary_result['public_id'],
                 file_public_id=cloudinary_result['public_id'],
                 file_type="video"
             )
@@ -396,7 +397,7 @@ class StoryView(APIView):
                 "items": [
                     {
                         "id": i.id,
-                        "file": request.build_absolute_uri(i.file.url),
+                        "file": cloudinary.utils.cloudinary_url(i.file)[0] if i.file else None,
                         "expired_at": i.expired_at,
                         "is_active": not i.is_expired(),
                     }
@@ -413,17 +414,16 @@ class StoryView(APIView):
         if not files:
             return api_response(success=False, message="No files uploaded.", status_code=400)
 
-        import cloudinary.uploader
-
         for f in files:
-            cloudinary_result = cloudinary.uploader.upload(
+            cloudinary_result = cloudinary.uploader.upload_large(
                 f,
                 resource_type="auto",
-                folder="stories/"
+                folder="stories/",
+                chunk_size=6000000  # 6MB chunks for large files
             )
             StoryItem.objects.create(
                 story=story,
-                file=cloudinary_result['secure_url'],
+                file=cloudinary_result['public_id'],
                 file_public_id=cloudinary_result['public_id'],
                 expired_at=timezone.now() + timedelta(hours=24),
             )

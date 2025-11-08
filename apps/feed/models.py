@@ -60,8 +60,8 @@ class FeedFile(models.Model):
     )
 
     feed = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="files")
-    file = models.URLField(null=True, blank=True)  # Cloudinary file URL
-    file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Cloudinary public ID
+    file = models.CharField(max_length=255, null=True, blank=True)  # Cloudinary public ID
+    file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Cloudinary public ID (duplicate for consistency)
     file_type = models.CharField(max_length=10, choices=FILE_TYPE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -256,8 +256,8 @@ class Story(models.Model):
 
 class StoryItem(models.Model):
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="items")
-    file = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-    file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+    file = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+    file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID (duplicate for consistency)
     expired_at = models.DateTimeField()
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
