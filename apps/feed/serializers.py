@@ -55,11 +55,23 @@ class FeedSerializer(serializers.ModelSerializer):
 
     def get_images(self, obj):
         request = self.context.get("request")
-        return [build_url(request, f.file) for f in obj.files.filter(file_type="image")]
+        images = []
+        for f in obj.files.filter(file_type="image"):
+            if f.file:
+                from cloudinary.utils import cloudinary_url
+                url, _ = cloudinary_url(f.file)
+                images.append(url)
+        return images
 
     def get_videos(self, obj):
         request = self.context.get("request")
-        return [build_url(request, f.file) for f in obj.files.filter(file_type="video")]
+        videos = []
+        for f in obj.files.filter(file_type="video"):
+            if f.file:
+                from cloudinary.utils import cloudinary_url
+                url, _ = cloudinary_url(f.file)
+                videos.append(url)
+        return videos
 
     def get_is_unlocked(self, obj):
         request = self.context.get("request")
