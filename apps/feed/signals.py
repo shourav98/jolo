@@ -36,9 +36,16 @@ def add_like(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=Like)
 def remove_like(sender, instance, **kwargs):
     feed = instance.content_object
-    if isinstance(feed, Feed) and feed.total_like > 0:
-        feed.total_like -= 1
-        feed.save(update_fields=["total_like"])
+    if isinstance(feed, Feed):
+        # Reduce like count safely
+        if feed.total_like > 0:
+            feed.total_like -= 1
+
+        # Increase unlike count
+        feed.total_unlike += 1
+
+        feed.save(update_fields=["total_like", "total_unlike"])
+
 
 
 
@@ -47,18 +54,37 @@ def remove_like(sender, instance, **kwargs):
 @receiver(post_save, sender=Comment)
 def add_comment(sender, instance, created, **kwargs):
     if created:
-        feed = instance.content_object
-        if isinstance(feed, Feed):
-            feed.total_comment += 1
-            feed.save(update_fields=["total_comment"])
-            update_topfan(feed.profile, instance.comment_by, 3)
+        try:
+            feed = instance.content_object
+            if isinstance(feed, Feed):
+                # Always recalc fresh count to avoid mismatch
+                from django.contrib.contenttypes.models import ContentType
+                ctype = ContentType.objects.get_for_model(Feed)
+                count = Comment.objects.filter(
+                    content_type=ctype, object_id=feed.id
+                ).count()
+                feed.total_comment = count
+                feed.save(update_fields=["total_comment"])
+                update_topfan(feed.profile, instance.comment_by, 3)
+        except Exception as e:
+            print(f"[Comment Signal Error: add_comment] {e}")
+
 
 @receiver(post_delete, sender=Comment)
 def remove_comment(sender, instance, **kwargs):
-    feed = instance.content_object
-    if isinstance(feed, Feed) and feed.total_comment > 0:
-        feed.total_comment -= 1
-        feed.save(update_fields=["total_comment"])
+    try:
+        feed = instance.content_object
+        if isinstance(feed, Feed):
+            from django.contrib.contenttypes.models import ContentType
+            ctype = ContentType.objects.get_for_model(Feed)
+            count = Comment.objects.filter(
+                content_type=ctype, object_id=feed.id
+            ).count()
+            feed.total_comment = count
+            feed.save(update_fields=["total_comment"])
+    except Exception as e:
+        print(f"[Comment Signal Error: remove_comment] {e}")
+
 
 
 
