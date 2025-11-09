@@ -6,7 +6,6 @@ from datetime import timedelta
 from .managers import CustomUserManager
 
 
-
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, unique=True)
@@ -54,13 +53,12 @@ class UserProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
     )
-    # profile_photo = models.ImageField(
-    #     upload_to="profile_photos/%Y/%m/%d/", blank=True, null=True
-    # )
-    profile_photo = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-    profile_photo_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
-    cover_photo = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-    cover_photo_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+
+    profile_photo = models.URLField(null=True, blank=True)
+    profile_photo_public_id = models.CharField(max_length=255, null=True, blank=True)
+    cover_photo = models.URLField(null=True, blank=True)
+    cover_photo_public_id = models.CharField(max_length=255, null=True, blank=True)
+
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, blank=True, null=True)
     date_of_birth = models.DateField(blank=True, null=True)
     street_address = models.CharField(max_length=255, blank=True, null=True)
@@ -72,16 +70,36 @@ class UserProfile(models.Model):
     flirt_line = models.CharField(max_length=255, blank=True, null=True)
     is_creator = models.BooleanField(default=False)
 
-    # New fields for chat functionality
     welcome_message = models.TextField(blank=True, null=True, help_text="Auto-reply welcome message for creators")
     auto_translate = models.BooleanField(default=True, help_text="Auto-translate messages")
     is_online = models.BooleanField(default=False)
     last_online = models.DateTimeField(default=timezone.now)
-    # Monetization Application
-    id_proof = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-    id_proof_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
-    intro_video = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-    intro_video_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
+
+    id_proof = models.URLField(null=True, blank=True)
+    id_proof_public_id = models.CharField(max_length=255, null=True, blank=True)
+    intro_video = models.URLField(null=True, blank=True)
+    intro_video_public_id = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.name}'s Profile"
+
+    # Custom calculated fields
+    @property
+    def total_followers(self):
+        from apps.feed.models import Follow
+        return Follow.objects.filter(following=self).count()
+
+    @property
+    def total_following(self):
+        from apps.feed.models import Follow
+        return Follow.objects.filter(follower=self).count()
+
+    @property
+    def total_videos(self):
+        from apps.feed.models import FeedFile
+        return FeedFile.objects.filter(feed__profile=self, file_type="video").count()
+
+    @property
+    def total_feeds(self):
+        from apps.feed.models import Feed
+        return Feed.objects.filter(profile=self).count()

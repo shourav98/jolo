@@ -19,6 +19,7 @@ class Feed(models.Model):
     unlock_price = models.PositiveIntegerField(default=0, help_text="Coins required if status=locked")
 
     total_like = models.PositiveIntegerField(default=0)
+    total_unlike = models.PositiveIntegerField(default=0)
     total_comment = models.PositiveIntegerField(default=0)
     total_view = models.PositiveIntegerField(default=0)
 

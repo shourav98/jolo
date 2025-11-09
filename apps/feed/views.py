@@ -7,6 +7,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from datetime import timedelta
 from django.utils import timezone
 from apps.monetization.models import CreatorTier
+from django.contrib.contenttypes.models import ContentType
+
 
 
 from apps.feed.models import (
@@ -160,17 +162,21 @@ class LikeToggle(APIView):
     def post(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
         profile = request.user.profile
-        existing_like = Like.objects.filter(
-            content_type__model="feed", object_id=feed.id, liked_by=profile
+        content_type = ContentType.objects.get_for_model(Feed)
+
+        like, created = Like.objects.get_or_create(
+            content_type=content_type,
+            object_id=feed.id,
+            liked_by=profile
         )
-        if existing_like.exists():
-            existing_like.delete()
-            feed.total_like = max(feed.total_like - 1, 0)
-            feed.save(update_fields=["total_like"])
+
+        if not created:
+            # Already liked → unlike
+            like.delete()
+            # count will auto update via signal
             return api_response(message="Unliked successfully.", data={"liked": False})
-        Like.objects.create(content_object=feed, liked_by=profile)
-        feed.total_like += 1
-        feed.save(update_fields=["total_like"])
+
+        # Newly liked
         return api_response(message="Liked successfully.", data={"liked": True})
 
 
@@ -191,10 +197,9 @@ class CommentListCreateView(APIView):
         serializer = CommentSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save(content_object=feed, comment_by=request.user.profile)
-            feed.total_comment += 1
-            feed.save(update_fields=["total_comment"])
             return api_response(message="Comment added successfully.", data=serializer.data, status_code=201)
         return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+
 
 
 
@@ -270,14 +275,19 @@ class FollowToggle(APIView):
     def post(self, request, creator_id):
         fan = request.user.profile
         creator = get_object_or_404(UserProfile, id=creator_id)
+
         if fan == creator:
             return api_response(success=False, message="You cannot follow yourself.", status_code=400)
 
+        # Prevent race-condition duplicates
         relation, created = Follow.objects.get_or_create(follower=fan, following=creator)
+
         if not created:
             relation.delete()
             return api_response(message="Unfollowed successfully.", data={"following": False})
+
         return api_response(message="Followed successfully.", data={"following": True})
+
 
 
 

@@ -20,7 +20,7 @@ def api_response(success=True, message="Success", data=None, status_code=200):
 
 
 class NotificationListView(APIView):
-    """Fetch all notifications for the logged-in user"""
+    
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
@@ -40,7 +40,7 @@ class NotificationListView(APIView):
 
 
 class MarkAsReadView(APIView):
-    """Mark a specific notification as read"""
+    
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
@@ -64,7 +64,7 @@ class MarkAsReadView(APIView):
 
 
 class NotificationDeleteView(APIView):
-    """Delete a specific notification"""
+   
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
