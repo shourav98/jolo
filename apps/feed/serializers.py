@@ -43,6 +43,7 @@ class FeedSerializer(serializers.ModelSerializer):
             "unlock_price",
             "is_unlocked",
             "total_like",
+            "total_unlike",
             "total_comment",
             "total_view",
             "created_at",

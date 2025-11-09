@@ -76,6 +76,11 @@ class ProfileSerializer(serializers.ModelSerializer):
     id_proof = serializers.URLField(read_only=True)
     intro_video = serializers.URLField(read_only=True)
 
+    total_followers = serializers.IntegerField(read_only=True)
+    total_following = serializers.IntegerField(read_only=True)
+    total_videos = serializers.IntegerField(read_only=True)
+    total_feeds = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = UserProfile
         fields = [
@@ -98,6 +103,11 @@ class ProfileSerializer(serializers.ModelSerializer):
             'flirt_line',
             'is_creator',
             'is_active',
+
+            'total_followers',
+            'total_following',
+            'total_videos',
+            'total_feeds',
         ]
 
     def __init__(self, *args, **kwargs):
