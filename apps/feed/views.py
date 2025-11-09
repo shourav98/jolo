@@ -397,7 +397,7 @@ class StoryView(APIView):
                 "items": [
                     {
                         "id": i.id,
-                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type="auto")[0] if i.file else None,
+                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type="image")[0] if i.file else None,
                         "expired_at": i.expired_at,
                         "is_active": not i.is_expired(),
                     }
