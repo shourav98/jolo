@@ -277,7 +277,7 @@ class MessagesAPIView(APIView):
             # Update user activity
             UserActivity.objects.update_or_create(
                 user=request.user,
-                defaults={'is_online': True, 'last_online': timezone.now()}
+                defaults={'is_online': True, 'last_online': timezone.now(), 'last_seen': timezone.now()}
             )
             
             response_serializer = MessageSerializer(message, context={'request': request})
