@@ -407,7 +407,7 @@ class StoryView(APIView):
                 "items": [
                     {
                         "id": i.id,
-                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type="auto")[0] if i.file else None,
+                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type="image")[0] if i.file else None,
                         "expired_at": i.expired_at,
                         "is_active": not i.is_expired(),
                     }
@@ -424,6 +424,7 @@ class StoryView(APIView):
         if not files:
             return api_response(success=False, message="No files uploaded.", status_code=400)
 
+        uploaded_items = []
         for f in files:
             cloudinary_result = cloudinary.uploader.upload_large(
                 f,
@@ -431,13 +432,29 @@ class StoryView(APIView):
                 folder="stories/",
                 chunk_size=6000000  # 6MB chunks for large files
             )
-            StoryItem.objects.create(
+            story_item = StoryItem.objects.create(
                 story=story,
                 file=cloudinary_result['public_id'],
                 file_public_id=cloudinary_result['public_id'],
                 expired_at=timezone.now() + timedelta(hours=24),
             )
-        return api_response(message="Story uploaded successfully.", status_code=201)
+            uploaded_items.append({
+                "id": story_item.id,
+                "file": cloudinary.utils.cloudinary_url(story_item.file, resource_type="image")[0],
+                "expired_at": story_item.expired_at,
+                "is_active": not story_item.is_expired(),
+            })
+
+        return api_response(
+            message="Story uploaded successfully.",
+            data={
+                "story_id": story.id,
+                "creator": story.profile.user.name,
+                "created_at": story.created_at,
+                "items": uploaded_items
+            },
+            status_code=201
+        )
 
     def delete(self, request):
         profile = request.user.profile
