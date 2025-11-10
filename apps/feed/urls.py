@@ -20,5 +20,7 @@ urlpatterns = [
 
     path("story/<int:story_id>/delete/", views.StoryItemDeleteView.as_view()),
 
+    path("search/", views.SearchAPIView.as_view(), name="feed-search")
+
 
 ]

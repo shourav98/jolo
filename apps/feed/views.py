@@ -20,7 +20,8 @@ from apps.feed.serializers import (
 from apps.account.models import UserProfile
 from apps.monetization.services import spend_coins
 import cloudinary
-
+from django.db.models import Q
+# from apps.account.serializers import UserSerializer
 
 
 #  Unified Response Helper
@@ -302,17 +303,43 @@ class TipCreatorView(APIView):
         fan = request.user
         creator = get_object_or_404(UserProfile, id=creator_id)
         coins = int(request.data.get("coins", 0))
+
         if coins <= 0:
-            return api_response(success=False, message="Invalid coin amount.", status_code=400)
+            return api_response(
+                success=False,
+                message="Invalid coin amount.",
+                status_code=400
+            )
 
         try:
+            #  Deduct coins from fan & credit to creator
             spend_coins(fan, creator.user, service="tip", coins=coins)
         except Exception as e:
             return api_response(success=False, message=str(e), status_code=400)
 
-        FeedTip.objects.create(sender=fan.profile, receiver=creator, amount=coins)
-        return api_response(message=f"Tipped {creator.user.name} with {coins} coins!")
+       
+        tip = FeedTip.objects.create(
+            sender=fan.profile,
+            receiver=creator,
+            amount=coins
+        )
 
+        
+        data = {
+            "tip_id": tip.id,
+            "sender_id": fan.profile.id,
+            "sender_name": fan.name,
+            "receiver_id": creator.id,
+            "receiver_name": creator.user.name,
+            "amount": coins,
+            "timestamp": tip.created_at,
+        }
+
+        return api_response(
+            message=f"Tipped {creator.user.name} with {coins} coins!",
+            data=data,
+            status_code=201
+        )
 
 
 # TOP FANS + MY CREATORS
@@ -521,3 +548,43 @@ class StoryItemDeleteView(APIView):
         )
 
 
+
+# =======================================
+# SEARCH API
+# =======================================
+
+class SearchAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get("q", "").strip()
+        limit = int(request.query_params.get("limit", 20))
+        offset = int(request.query_params.get("offset", 0))
+
+        if not query:
+            return Response({
+                "success": False,
+                "status_code": 400,
+                "message": "Search query required.",
+                "data": []
+            }, status=400)
+
+        # 🔍 Step 1: Find users whose name matches query
+        matched_profiles = UserProfile.objects.filter(
+            user__name__icontains=query
+        ).values_list("id", flat=True)
+
+        # 🔍 Step 2: Find feeds related to either content OR those users
+        feeds = Feed.objects.filter(
+            Q(profile_id__in=matched_profiles) |
+            Q(content__icontains=query)
+        ).select_related("profile", "profile__user").prefetch_related("files").order_by("-created_at")[offset:offset + limit]
+
+        serializer = FeedSerializer(feeds, many=True, context={"request": request})
+
+        return Response({
+            "success": True,
+            "status_code": 200,
+            "message": f"Feeds related to '{query}' fetched successfully.",
+            "data": serializer.data
+        })
