@@ -305,42 +305,36 @@ class TipCreatorView(APIView):
         coins = int(request.data.get("coins", 0))
 
         if coins <= 0:
-            return api_response(
-                success=False,
-                message="Invalid coin amount.",
-                status_code=400
-            )
+            return api_response(success=False, message="Invalid coin amount.", status_code=400)
 
         try:
-            #  Deduct coins from fan & credit to creator
-            spend_coins(fan, creator.user, service="tip", coins=coins)
-        except Exception as e:
+            # spend + split + ledger
+            result = spend_coins(fan=fan, creator=creator.user, service="tip", coins=coins)
+        except PermissionError as e:
+            return api_response(success=False, message=str(e), status_code=403)
+        except ValueError as e:
             return api_response(success=False, message=str(e), status_code=400)
 
-       
-        tip = FeedTip.objects.create(
+        # FeedTip-এ creator-এর real earned coins রাখব
+        FeedTip.objects.create(
             sender=fan.profile,
             receiver=creator,
-            amount=coins
+            amount=result["creator_share"]
         )
-
-        
-        data = {
-            "tip_id": tip.id,
-            "sender_id": fan.profile.id,
-            "sender_name": fan.name,
-            "receiver_id": creator.id,
-            "receiver_name": creator.user.name,
-            "amount": coins,
-            "timestamp": tip.created_at,
-        }
 
         return api_response(
-            message=f"Tipped {creator.user.name} with {coins} coins!",
-            data=data,
+            message=f"Tipped {creator.user.name} successfully.",
+            data={
+                "coins_spent": result["coins_spent"],
+                "creator_share": result["creator_share"],
+                "platform_share": result["platform_share"],
+                "gross_usd": result["gross_usd"],
+                "creator_usd": result["creator_usd"],
+                "platform_usd": result["platform_usd"],
+                "event_id": result["event_id"],
+            },
             status_code=201
         )
-
 
 # TOP FANS + MY CREATORS
 
