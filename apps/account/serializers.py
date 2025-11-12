@@ -65,67 +65,65 @@ class LoginSerializer(serializers.Serializer):
 class ProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='user.name', required=False)
     is_active = serializers.BooleanField(source='user.is_active', read_only=True)
+
+    # Upload fields (input)
     profile_photo_file = serializers.FileField(required=False, write_only=True)
     cover_photo_file = serializers.FileField(required=False, write_only=True)
     id_proof_file = serializers.FileField(required=False, write_only=True)
     intro_video_file = serializers.FileField(required=False, write_only=True)
 
-    # Read-only fields for displaying URLs
-    profile_photo = serializers.URLField(read_only=True)
-    cover_photo = serializers.URLField(read_only=True)
-    id_proof = serializers.URLField(read_only=True)
-    intro_video = serializers.URLField(read_only=True)
-
-    total_followers = serializers.IntegerField(read_only=True)
-    total_following = serializers.IntegerField(read_only=True)
-    total_videos = serializers.IntegerField(read_only=True)
-    total_feeds = serializers.IntegerField(read_only=True)
+    # Display URLs (output)
+    profile_photo_url = serializers.SerializerMethodField()
+    cover_photo_url = serializers.SerializerMethodField()
+    id_proof_url = serializers.SerializerMethodField()
+    intro_video_url = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
         fields = [
-            'full_name',
-            'profile_photo',
-            'cover_photo',
-            'profile_photo_file',
-            'cover_photo_file',
-            'id_proof',
-            'intro_video',
-            'id_proof_file',
-            'intro_video_file',
-            'gender',
-            'date_of_birth',
-            'street_address',
-            'zip_code',
-            'city',
-            'country',
-            'bio',
-            'flirt_line',
-            'is_creator',
-            'is_active',
-
-            'total_followers',
-            'total_following',
-            'total_videos',
-            'total_feeds',
+            "full_name",
+            "gender", "date_of_birth", "street_address", "zip_code",
+            "city", "country", "bio", "flirt_line",
+            "is_creator", "is_active",
+            # Upload fields
+            "profile_photo_file", "cover_photo_file",
+            "id_proof_file", "intro_video_file",
+            # Display fields
+            "profile_photo_url", "cover_photo_url",
+            "id_proof_url", "intro_video_url",
+            # Stats
+            "total_followers", "total_following", "total_videos", "total_feeds",
         ]
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Remove URL fields from input validation since they're handled in the view
-        if self.context.get('request') and self.context['request'].method in ['PUT', 'PATCH']:
-            self.fields.pop('profile_photo', None)
-            self.fields.pop('cover_photo', None)
-            self.fields.pop('id_proof', None)
-            self.fields.pop('intro_video', None)
+    # For displaying profile photo URL
+    def get_profile_photo_url(self, obj):
+        if getattr(obj, "profile_photo", None):
+            return obj.profile_photo
+        return None
+
+    # For displaying cover photo URL
+    def get_cover_photo_url(self, obj):
+        if getattr(obj, "cover_photo", None):
+            return obj.cover_photo
+        return None
+
+    def get_id_proof_url(self, obj):
+        if getattr(obj, "id_proof", None):
+            return obj.id_proof
+        return None
+
+    def get_intro_video_url(self, obj):
+        if getattr(obj, "intro_video", None):
+            return obj.intro_video
+        return None
 
     def update(self, instance, validated_data):
-        user_data = validated_data.pop('user', None)
-
-        if user_data and 'name' in user_data:
-            instance.user.name = user_data['name']
+        user_data = validated_data.pop("user", None)
+        if user_data and "name" in user_data:
+            instance.user.name = user_data["name"]
             instance.user.save()
 
+        # normal update
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
