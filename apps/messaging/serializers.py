@@ -74,15 +74,19 @@ class MessageReactionSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.name', read_only=True)
     sender_profile_photo = serializers.SerializerMethodField()
+    receiver = serializers.SerializerMethodField()
+    receiver_name = serializers.SerializerMethodField()
+    receiver_profile_photo = serializers.SerializerMethodField()
     reactions = MessageReactionSerializer(many=True, read_only=True)
     can_react = serializers.SerializerMethodField()
-    coins_used = serializers.IntegerField(read_only=True) 
+    coins_used = serializers.IntegerField(read_only=True)
     document_file = serializers.URLField(read_only=True)  # Cloudinary URL
-    
+
     class Meta:
         model = Message
         fields = [
             'id', 'session', 'sender', 'sender_name', 'sender_profile_photo',
+            'receiver', 'receiver_name', 'receiver_profile_photo',
             'content', 'translated_content', 'coins_used',
             'created_at', 'is_read', 'reactions', 'can_react', 'document_file',
         ]
@@ -92,7 +96,29 @@ class MessageSerializer(serializers.ModelSerializer):
             photo = obj.sender.profile.profile_photo
             return photo.url if hasattr(photo, 'url') else str(photo)
         return None
-        
+
+    def get_receiver(self, obj):
+        if obj.sender == obj.session.creator:
+            return obj.session.fan.id
+        else:
+            return obj.session.creator.id
+
+    def get_receiver_name(self, obj):
+        if obj.sender == obj.session.creator:
+            return obj.session.fan.name
+        else:
+            return obj.session.creator.name
+
+    def get_receiver_profile_photo(self, obj):
+        if obj.sender == obj.session.creator:
+            receiver = obj.session.fan
+        else:
+            receiver = obj.session.creator
+        if hasattr(receiver, 'profile') and receiver.profile.profile_photo:
+            photo = receiver.profile.profile_photo
+            return photo.url if hasattr(photo, 'url') else str(photo)
+        return None
+
     def get_can_react(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:

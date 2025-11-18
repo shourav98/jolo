@@ -559,8 +559,12 @@ class ChatSessionMessagesAPIView(APIView):
             messages = Message.objects.filter(
                 session=chat_session
             ).select_related(
-                'sender', 
-                'sender__profile'
+                'sender',
+                'sender__profile',
+                'session__creator',
+                'session__fan',
+                'session__creator__profile',
+                'session__fan__profile'
             ).prefetch_related(
                 'reactions',
                 'reactions__user'
