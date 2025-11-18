@@ -56,14 +56,38 @@ class LoginView(APIView):
         if serializer.is_valid():
             user = serializer.validated_data['user']
             refresh = RefreshToken.for_user(user)
+
+            user_data = {
+                "id": user.id,
+                "name": user.name,
+                "phone": user.phone,
+                "email": user.email,
+                "role": user.role,
+                "status": user.status,
+                "gender": user.gender,
+                "date_of_birth": user.date_of_birth,
+                "street_address": user.street_address,
+                "zip_code": user.zip_code,
+                "city": user.city,
+                "country": user.country,
+                "avatar": user.avatar.url if user.avatar else None
+            }
+
             return Response({
-                "status": 200,
-                "success": True,
-                "access": str(refresh.access_token),
-                # "refresh": str(refresh),
-                "message": "Login successful"
-            })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                "status": True,
+                "message": "User logged in successfully.",
+                "token": str(refresh.access_token),
+                "userData": user_data,
+                "code": 200
+            }, status=200)
+
+        return Response({
+            "status": False,
+            "message": "Invalid phone or password",
+            "errors": serializer.errors,
+            "code": 400
+        }, status=400)
+
 
 
 # Profile
