@@ -57,20 +57,19 @@ class LoginView(APIView):
             user = serializer.validated_data['user']
             refresh = RefreshToken.for_user(user)
 
+            profile = user.profile  # access profile model
+
             user_data = {
                 "id": user.id,
                 "name": user.name,
                 "phone": user.phone,
-                "email": user.email,
-                "role": user.role,
-                "status": user.status,
-                "gender": user.gender,
-                "date_of_birth": user.date_of_birth,
-                "street_address": user.street_address,
-                "zip_code": user.zip_code,
-                "city": user.city,
-                "country": user.country,
-                "avatar": user.avatar.url if user.avatar else None
+                "gender": profile.gender,
+                "date_of_birth": profile.date_of_birth,
+                "street_address": profile.street_address,
+                "zip_code": profile.zip_code,
+                "city": profile.city,
+                "country": profile.country,
+                # "profile_photo_file": profile.profile_photo_file.url if profile.avatar else None
             }
 
             return Response({
@@ -79,7 +78,7 @@ class LoginView(APIView):
                 "token": str(refresh.access_token),
                 "userData": user_data,
                 "code": 200
-            }, status=200)
+            })
 
         return Response({
             "status": False,
@@ -87,6 +86,7 @@ class LoginView(APIView):
             "errors": serializer.errors,
             "code": 400
         }, status=400)
+
 
 
 
