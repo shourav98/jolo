@@ -250,8 +250,10 @@ class UnlockFeed(APIView):
     def post(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
         fan = request.user
+
         if feed.status != "locked":
             return api_response(success=False, message="Feed is already public.", status_code=400)
+
         if feed.is_unlocked_for(fan):
             return api_response(success=False, message="Feed already unlocked.", status_code=400)
 
@@ -263,7 +265,22 @@ class UnlockFeed(APIView):
         Unlock.objects.create(feed=feed, fan=fan.profile)
         feed.total_view += 1
         feed.save(update_fields=["total_view"])
-        return api_response(message="Feed unlocked successfully.")
+
+        return api_response(
+            message="Feed unlocked successfully.",
+            data={
+                "feed": {
+                    "id": feed.id,
+                    "unlock_price": feed.unlock_price,
+                    "total_view": feed.total_view
+                },
+                "fan": {
+                    "id": fan.id,
+                    "remaining_coins": fan.coins
+                }
+            }
+        )
+
 
 
 
