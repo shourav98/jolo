@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <script>
+        const status = document.getElementById('status');
+        const messages = document.getElementById('messages');
+        
+        // Test WebSocket connection
+        const ws = new WebSocket('wss://jolo.softvencealpha.com/ws/test/');
+        
+        ws.onopen = function(event) {
+            status.innerHTML = '<span style="color: green;">✓ WebSocket Connected!</span>';
+            messages.innerHTML += '<p>Connection opened</p>';
+        };
+        
+        ws.onmessage = function(event) {
+            messages.innerHTML += '<p>Received: ' + event.data + '</p>';
+        };
+        
+        ws.onerror = function(error) {
+            status.innerHTML = '<span style="color: red;">✗ WebSocket Error</span>';
+            messages.innerHTML += '<p style="color: red;">Error: ' + error + '</p>';
+        };
+        
+        ws.onclose = function(event) {
+            status.innerHTML = '<span style="color: orange;">WebSocket Closed</span>';
+            messages.innerHTML += '<p>Connection closed: ' + event.code + ' - ' + event.reason + '</p>';
+        };
+        
+        // Send a test message after 2 seconds
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send('Hello WebSocket!');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
