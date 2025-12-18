@@ -445,7 +445,8 @@ class StoryView(APIView):
                 "items": [
                     {
                         "id": i.id,
-                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type="image")[0] if i.file else None,
+                        "file": cloudinary.utils.cloudinary_url(i.file, resource_type=i.file_type)[0] if i.file else None,
+                        "file_type": i.file_type,
                         "expired_at": i.expired_at,
                         "is_active": not i.is_expired(),
                     }
@@ -464,6 +465,23 @@ class StoryView(APIView):
 
         uploaded_items = []
         for f in files:
+            # Detect file type based on content type
+            content_type = f.content_type.lower()
+            if content_type.startswith('video/'):
+                file_type = "video"
+            elif content_type.startswith('image/'):
+                file_type = "image"
+            else:
+                # Fallback: try to detect from file extension
+                filename = f.name.lower()
+                if any(filename.endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv']):
+                    file_type = "video"
+                elif any(filename.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']):
+                    file_type = "image"
+                else:
+                    # Default to image if we can't determine
+                    file_type = "image"
+            
             cloudinary_result = cloudinary.uploader.upload_large(
                 f,
                 resource_type="auto",
@@ -474,11 +492,13 @@ class StoryView(APIView):
                 story=story,
                 file=cloudinary_result['public_id'],
                 file_public_id=cloudinary_result['public_id'],
+                file_type=file_type,
                 expired_at=timezone.now() + timedelta(hours=24),
             )
             uploaded_items.append({
                 "id": story_item.id,
-                "file": cloudinary.utils.cloudinary_url(story_item.file, resource_type="image")[0],
+                "file": cloudinary.utils.cloudinary_url(story_item.file, resource_type=story_item.file_type)[0],
+                "file_type": story_item.file_type,
                 "expired_at": story_item.expired_at,
                 "is_active": not story_item.is_expired(),
             })

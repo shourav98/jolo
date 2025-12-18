@@ -256,9 +256,15 @@ class Story(models.Model):
 
 
 class StoryItem(models.Model):
+    FILE_TYPE_CHOICES = (
+        ("image", "Image"),
+        ("video", "Video"),
+    )
+    
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="items")
     file = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
     file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID (duplicate for consistency)
+    file_type = models.CharField(max_length=10, choices=FILE_TYPE_CHOICES, default="image")
     expired_at = models.DateTimeField()
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
