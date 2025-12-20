@@ -1,0 +1,39 @@
+<!-- templates/pages/legal.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      background: #0f0f0f;
+      color: #eaeaea;
+      font-family: system-ui;
+      padding: 16px;
+    }
+    .section {
+      background: #1a1a1a;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      color: #bb86fc;
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Support & Safety page user</h1>
+
+{% for section in sections %}
+  <div class="section">
+    <h2>{{ section.title }}</h2>
+    <div>
+      {{ section.content|safe }}
+    </div>
+  </div>
+{% endfor %}
+
+</body>
+</html>
