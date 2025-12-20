@@ -8,6 +8,8 @@ class InfoSection(models.Model):
     PAGE_CHOICES = (
         ('legal', 'Legal'),
         ('support', 'Support & Safety'),
+        ('legal_user', 'Legal User'),
+        ('support_user', 'Support & Safety User'),
     )
 
     page = models.CharField(
