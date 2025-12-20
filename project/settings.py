@@ -43,16 +43,17 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'channels',
+    'django_ckeditor_5',
     # 'django.contrib.contenttypes'
     # 'corsheaders',
 
     # Local apps
-    'apps.account',
+    'apps.account.apps.AccountConfig',
     'apps.feed.apps.FeedConfig',
-    'apps.messaging',
-    'apps.monetization',
-    'apps.notification'
-    # 'apps.chatting_app',
+    'apps.messaging.apps.MessagingConfig',
+    'apps.monetization.apps.MonetizationConfig',
+    'apps.notification.apps.NotificationConfig',
+    'apps.cms.apps.CmsConfig',
 ]
 
 MIDDLEWARE = [
@@ -264,3 +265,17 @@ cloudinary.config(
     api_secret=CLOUDINARY_API_SECRET
 )
 STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/payment/cancel")
+
+
+CKEDITOR_5_CONFIGS = {
+    'extends': {
+        'toolbar': [
+            'heading', '|',
+            'bold', 'italic', 'underline', 'strikethrough', '|',
+            'bulletedList', 'numberedList', '|',
+            'link', 'blockQuote', '|',
+            'undo', 'redo',
+        ],
+    },
+}
+
