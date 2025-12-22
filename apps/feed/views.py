@@ -537,6 +537,71 @@ class StoryView(APIView):
 
 
 
+class StoryReplyView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, story_item_id):
+        story_item = get_object_or_404(
+            StoryItem,
+            id=story_item_id,
+            is_active=True,
+            expired_at__gt=timezone.now()
+        )
+
+        content = request.data.get("content", "").strip()
+        if not content:
+            return api_response(
+                success=False,
+                message="Reply cannot be empty.",
+                status_code=400
+            )
+
+        comment = Comment.objects.create(
+            content=content,
+            content_object=story_item,
+            comment_by=request.user.profile
+        )
+
+        serializer = CommentSerializer(
+            comment,
+            context={"request": request}
+        )
+
+        return api_response(
+            message="Reply sent successfully.",
+            data=serializer.data,
+            status_code=201
+        )
+    
+
+
+class StoryReactionToggleView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, story_item_id):
+        story_item = get_object_or_404(StoryItem, id=story_item_id)
+
+        content_type = ContentType.objects.get_for_model(StoryItem)
+        profile = request.user.profile
+
+        reaction, created = Like.objects.get_or_create(
+            content_type=content_type,
+            object_id=story_item.id,
+            liked_by=profile
+        )
+
+        if not created:
+            reaction.delete()
+            return api_response(
+                message="Reaction removed.",
+                data={"reacted": False}
+            )
+
+        return api_response(
+            message="Reacted to story.",
+            data={"reacted": True}
+        )
+    
 
 
 
