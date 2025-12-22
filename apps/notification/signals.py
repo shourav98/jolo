@@ -59,12 +59,23 @@ def notify_like_received(sender, instance, created, **kwargs):
 def notify_comment_received(sender, instance, created, **kwargs):
     if created:
         if hasattr(instance.content_object, "profile"):
+            # Feed comments
             creator = instance.content_object.profile.user
-            Notification.objects.create(
-                user=creator,
-                title=f"@{instance.comment_by.user.username} commented on your post.",
-                type="comment_received"
-            )
+            content_type = "post"
+        elif hasattr(instance.content_object, "story"):
+            # Story comments
+            creator = instance.content_object.story.profile.user
+            content_type = "story"
+        else:
+            return
+
+        Notification.objects.create(
+            user=creator,
+            title=f"@{instance.comment_by.user.username} commented on your {content_type}.",
+            body=instance.content,  # Include the actual comment content
+            type="comment_received",
+            related_event_id=str(instance.id)  # Store comment ID for reference
+        )
 
 
 # 6️⃣ Follow → Creator notified
