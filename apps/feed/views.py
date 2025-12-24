@@ -124,8 +124,10 @@ class FeedListCreateView(APIView):
         )
 
 
+
 class FeedDetailView(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
@@ -134,11 +136,33 @@ class FeedDetailView(APIView):
 
     def put(self, request, pk):
         feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        
+        # Update feed fields
         serializer = FeedSerializer(feed, data=request.data, partial=True, context={"request": request})
-        if serializer.is_valid():
-            serializer.save()
-            return api_response(message="Feed updated successfully.", data=serializer.data)
-        return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+        if not serializer.is_valid():
+            return api_response(success=False, message="Validation error", data=serializer.errors, status_code=400)
+        
+        updated_feed = serializer.save()
+        
+        # ✅ Handle file updates - ENHANCED VERSION WITH AUTO DETECTION
+        self.handle_file_updates_improved(request, feed)
+        
+        # Automatically update unlock_price if status changed to locked
+        if feed.status == "locked" and not feed.unlock_price:
+            tier = getattr(request.user.creator_profile, "tier", CreatorTier.SILVER)
+            tier_prices = {
+                CreatorTier.SILVER: 500,
+                CreatorTier.GOLD: 500,
+                CreatorTier.PLATINUM: 750,
+                CreatorTier.DIAMOND: 1000,
+            }
+            feed.unlock_price = tier_prices.get(tier, 500)
+            feed.save(update_fields=["unlock_price"])
+        
+        return api_response(
+            message="Feed updated successfully.",
+            data=FeedSerializer(updated_feed, context={"request": request}).data
+        )
 
     def delete(self, request, pk):
         feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
@@ -150,6 +174,103 @@ class FeedDetailView(APIView):
             data={"feed_id": feed_id},
             status_code=200  
         )
+    
+    def handle_file_updates_improved(self, request, feed):
+        """
+        Simplified file handling - replaces existing files by default
+        1. Remove all existing files first
+        2. Upload new files with automatic type detection
+        3. Supports multiple field names for flexibility
+        """
+        # SIMPLE APPROACH: Remove all existing files first
+        # Delete from Cloudinary first
+        for file_obj in feed.files.all():
+            if file_obj.file_public_id:
+                try:
+                    cloudinary.uploader.destroy(file_obj.file_public_id, resource_type=file_obj.file_type)
+                except Exception as e:
+                    print(f"Error deleting from Cloudinary: {e}")
+        # Delete from database
+        feed.files.all().delete()
+        
+        # Try multiple field names for maximum compatibility
+        field_names_to_check = [
+            "image", "images", "video", "videos", "file", "files", "media"
+        ]
+        
+        all_files = []
+        for field_name in field_names_to_check:
+            if field_name in request.FILES:
+                all_files.extend(request.FILES.getlist(field_name))
+        
+        # Process all files with automatic type detection
+        for uploaded_file in all_files:
+            try:
+                # Auto-detect file type based on content type and extension
+                content_type = uploaded_file.content_type.lower()
+                filename = uploaded_file.name.lower()
+                
+                # Determine file type
+                if content_type.startswith('video/') or any(filename.endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv']):
+                    file_type = "video"
+                    folder = "feed/videos/"
+                elif content_type.startswith('image/') or any(filename.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']):
+                    file_type = "image"
+                    folder = "feed/images/"
+                else:
+                    # Default to image if we can't determine
+                    file_type = "image"
+                    folder = "feed/images/"
+                
+                # Upload to Cloudinary
+                cloudinary_result = cloudinary.uploader.upload_large(
+                    uploaded_file,
+                    resource_type="auto",
+                    folder=folder,
+                    chunk_size=6000000
+                )
+                
+                # Save to database
+                FeedFile.objects.create(
+                    feed=feed,
+                    file=cloudinary_result['public_id'],
+                    file_public_id=cloudinary_result['public_id'],
+                    file_type=file_type
+                )
+                
+            except Exception as e:
+                print(f"Error uploading file {uploaded_file.name}: {e}")
+                # Continue with other files even if one fails
+    def handle_file_updates_debug(self, request, feed):
+        """
+        Debug version to see exactly what's happening
+        """
+        print(f"DEBUG: Request FILES: {dict(request.FILES)}")
+        print(f"DEBUG: Request DATA: {dict(request.data)}")
+        print(f"DEBUG: Existing files: {list(feed.files.values_list('file', flat=True))}")
+        
+        # Check what's actually in the request
+        image_files = request.FILES.getlist("image")
+        video_files = request.FILES.getlist("video")
+        
+        print(f"DEBUG: Image files count: {len(image_files)}")
+        print(f"DEBUG: Video files count: {len(video_files)}")
+        
+        for i, img in enumerate(image_files):
+            print(f"DEBUG: Image {i}: name={img.name}, size={img.size}, content_type={img.content_type}")
+        
+        for i, vid in enumerate(video_files):
+            print(f"DEBUG: Video {i}: name={vid.name}, size={vid.size}, content_type={vid.content_type}")
+        
+        # Proceed with upload if files exist
+        if image_files or video_files:
+            print("DEBUG: Proceeding with upload...")
+            self.handle_file_updates_improved(request, feed)
+        else:
+            print("DEBUG: No new files to upload")
+                
+
+
 
 
 
