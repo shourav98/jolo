@@ -21,6 +21,9 @@ from .serializers import (
 )
 import random
 
+from django.shortcuts import get_object_or_404
+from .models import UserProfile
+from .serializers import ProfileDetailSerializer
 
 
 
@@ -200,6 +203,27 @@ class ProfileView(APIView):
             "success": True,
             "message": "Profile updated successfully",
             "data": response_serializer.data
+        })
+
+
+class PublicProfileView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, profile_id):
+        profile = get_object_or_404(
+            UserProfile,
+            id=profile_id,
+        )
+
+        serializer = ProfileDetailSerializer(
+            profile,
+            context={"request": request}
+        )
+
+        return Response({
+            "status": 200,
+            "success": True,
+            "data": serializer.data
         })
 
 

@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import CustomUser, UserProfile, OTPVerification
 from django.contrib.auth import authenticate
+from apps.feed.models import Feed
+from apps.feed.serializers import FeedSerializer
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -81,7 +83,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = [
-            "full_name",
+            "id", "full_name",
             "gender", "date_of_birth", "street_address", "zip_code",
             "city", "country", "bio", "flirt_line",
             "is_creator", "is_active",
@@ -130,6 +132,53 @@ class ProfileSerializer(serializers.ModelSerializer):
 
         return instance
 
+class ProfileDetailSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="user.name")
+
+    feeds = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserProfile
+        fields = [
+            "id",
+            "name",
+            "profile_photo",
+            "cover_photo",
+            "bio",
+            "flirt_line",
+            "is_creator",
+            "total_followers",
+            "total_following",
+            "total_videos",
+            "total_feeds",
+            "is_following",
+            "feeds",
+        ]
+
+    def get_is_following(self, obj):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+
+        from apps.feed.models import Follow
+        return Follow.objects.filter(
+            follower=request.user.profile,
+            following=obj
+        ).exists()
+
+    def get_feeds(self, obj):
+        request = self.context.get("request")
+
+        qs = (
+            Feed.objects
+            .filter(profile=obj, status="public")
+            .order_by("-created_at")[:10]   # ✅ LIMIT HERE
+        )
+
+        return FeedSerializer(qs, many=True, context={"request": request}).data
+
+    
 
 
 class ForgotPasswordOTPRequestSerializer(serializers.Serializer):
