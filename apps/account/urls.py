@@ -10,6 +10,7 @@ from .views import (
     LogoutView,
     DeleteAccountView,
     VerifyTokenAPIView,
+    PublicProfileView,
 )
 
 urlpatterns = [
@@ -24,4 +25,5 @@ urlpatterns = [
     path('delete-account/', DeleteAccountView.as_view(), name='delete-account'),
 
     path('verify-token/', VerifyTokenAPIView.as_view(), name='verify-token'),
+    path("profile/<int:profile_id>/", PublicProfileView.as_view()),
 ]
