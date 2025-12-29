@@ -170,13 +170,14 @@ class ProfileDetailSerializer(serializers.ModelSerializer):
     def get_feeds(self, obj):
         request = self.context.get("request")
 
-        qs = (
-            Feed.objects
-            .filter(profile=obj, status="public")
-            .order_by("-created_at")[:10]   # ✅ LIMIT HERE
-        )
+        from apps.feed.models import Feed
 
-        return FeedSerializer(qs, many=True, context={"request": request}).data
+        qs = Feed.objects.filter(profile=obj).order_by("-created_at")[:10]
+
+        # For profile detail, show all feeds (public, followers, locked)
+        visible_feeds = list(qs)
+
+        return FeedSerializer(visible_feeds, many=True, context={"request": request}).data
 
     
 

@@ -52,12 +52,7 @@ class FeedSerializer(serializers.ModelSerializer):
         ]
 
     def get_author_photo(self, obj):
-        photo = getattr(obj.profile, "profile_photo", None)
-        if photo:
-            from cloudinary.utils import cloudinary_url
-            url, _ = cloudinary_url(photo)
-            return url
-        return None
+        return getattr(obj.profile, "profile_photo", None)
 
     def get_images(self, obj):
         request = self.context.get("request")
