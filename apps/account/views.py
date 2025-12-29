@@ -72,6 +72,7 @@ class LoginView(APIView):
                 "zip_code": profile.zip_code,
                 "city": profile.city,
                 "country": profile.country,
+                "is_creator": profile.is_creator,
                 # "profile_photo_file": profile.profile_photo_file.url if profile.avatar else None
             }
 
