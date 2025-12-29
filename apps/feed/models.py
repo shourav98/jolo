@@ -53,6 +53,26 @@ class Feed(models.Model):
             return True
         return Unlock.objects.filter(fan=vp, feed=self).exists()
 
+    def is_visible_to(self, user):
+        if not user or not user.is_authenticated:
+            return self.status == "public"
+
+        if self.status == "public":
+            return True
+
+        viewer_profile = user.profile
+
+        if self.profile_id == viewer_profile.id:
+            return True  # author sees own post
+
+        if self.status == "followers":
+            return Follow.objects.filter(follower=viewer_profile, following=self.profile).exists()
+
+        if self.status == "locked":
+            return Unlock.objects.filter(fan=viewer_profile, feed=self).exists()
+
+        return False
+
 
 class FeedFile(models.Model):
     FILE_TYPE_CHOICES = (
