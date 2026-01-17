@@ -101,7 +101,7 @@ class ProfileView(APIView):
 
     def get(self, request):
         profile = request.user.profile
-        serializer = ProfileSerializer(profile, context={"request": request})
+        serializer = ProfileDetailSerializer(profile, context={"request": request})
         return Response({
             "status": 200,
             "success": True,
