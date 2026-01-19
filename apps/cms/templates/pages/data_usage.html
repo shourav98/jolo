@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Usage Overview - Whysper</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #050509;
+      color: #f4f4f5;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      padding: 20px 16px 32px;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #e9d5ff;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .page-subtitle {
+      font-size: 0.95rem;
+      color: #a1a1aa;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: #111827;
+      border-radius: 18px;
+      padding: 16px 18px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.75);
+    }
+
+    .card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 20%, #f9a8ff, #7c3aed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fdf2ff;
+      font-size: 20px;
+    }
+
+    .card-content h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #f9fafb;
+    }
+
+    .card-content p {
+      font-size: 0.9rem;
+      color: #d4d4d8;
+      line-height: 1.5;
+    }
+
+    .footer-note {
+      margin-top: 28px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #111827;
+      color: #a1a1aa;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1 class="page-title">Data Usage Overview</h1>
+    <p class="page-subtitle">
+      Learn how your data is collected and used on Whysper.
+    </p>
+
+    <div class="card-list">
+      <div class="card">
+        <div class="card-icon">👤</div>
+        <div class="card-content">
+          <h2>Account Information</h2>
+          <p>
+            Includes your name, username, email address, profile photo, and
+            account settings.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">📈</div>
+        <div class="card-content">
+          <h2>Content Activity</h2>
+          <p>
+            Includes posts, stories, comments, likes, and interactions you
+            create on Whysper.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-icon">📱</div>
+        <div class="card-content">
+          <h2>Usage &amp; Device Data</h2>
+          <p>
+            Includes app usage activity, device type, and analytics used for
+            security and performance.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      We use this data to provide core features, improve user experience, and keep the platform secure.
+    </div>
+  </div>
+</body>
+</html>
