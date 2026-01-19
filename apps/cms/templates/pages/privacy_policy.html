@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy - Whysper</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #050509;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      padding: 20px 16px 32px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: #e9d5ff;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .page-subtitle {
+      font-size: 0.95rem;
+      color: #9ca3af;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .policy-card {
+      background: #020617;
+      border-radius: 18px;
+      padding: 18px 18px 20px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .section {
+      margin-bottom: 16px;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #f9fafb;
+      margin-bottom: 4px;
+    }
+
+    .section-content {
+      font-size: 0.92rem;
+      color: #d4d4d8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="page-title">Privacy Policy</h1>
+    <p class="page-subtitle">
+      Understand how we collect, use, and protect your personal data.
+    </p>
+
+    <div class="policy-card">
+      {% for section in sections %}
+        <section class="section">
+          {% if section.title %}
+            <h2 class="section-title">{{ section.title }}</h2>
+          {% endif %}
+          <div class="section-content">
+            {{ section.content|safe }}
+          </div>
+        </section>
+      {% empty %}
+        <p>No privacy policy content available yet.</p>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>
