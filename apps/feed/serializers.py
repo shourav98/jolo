@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.feed.models import Feed, FeedFile, Comment, TopFan
+from apps.feed.models import Feed, FeedFile, Comment, TopFan, BlockedUser, MutedPost, ReportedPost
 
 
 def build_url(request, value):
@@ -30,6 +30,8 @@ class FeedSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     videos = serializers.SerializerMethodField()
     is_unlocked = serializers.SerializerMethodField()
+    is_muted = serializers.SerializerMethodField()
+    is_author_blocked = serializers.SerializerMethodField()
 
     class Meta:
         model = Feed
@@ -41,7 +43,10 @@ class FeedSerializer(serializers.ModelSerializer):
             "content",
             "status",
             "unlock_price",
+            "comments_enabled",
             "is_unlocked",
+            "is_muted",
+            "is_author_blocked",
             "total_like",
             "total_unlike",
             "total_comment",
@@ -85,6 +90,24 @@ class FeedSerializer(serializers.ModelSerializer):
             return obj.is_unlocked_for(user)
         return True
 
+    def get_is_muted(self, obj):
+        """Check if current user has muted this post"""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        from apps.feed.models import MutedPost
+        return MutedPost.objects.filter(user=user.profile, post=obj).exists()
+
+    def get_is_author_blocked(self, obj):
+        """Check if current user has blocked the post author"""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        from apps.feed.models import BlockedUser
+        return BlockedUser.objects.filter(blocker=user.profile, blocked=obj.profile).exists()
+
 
 
 
@@ -122,6 +145,39 @@ class TopFanSerializer(serializers.ModelSerializer):
             return url
         return None
     
+
+# New Serializers for Post Menu Actions
+
+class BlockedUserSerializer(serializers.ModelSerializer):
+    """Serializer for user blocking"""
+    blocked_user_id = serializers.IntegerField(source="blocked.id", read_only=True)
+    blocked_user_name = serializers.CharField(source="blocked.user.name", read_only=True)
+
+    class Meta:
+        model = BlockedUser
+        fields = ["id", "blocked_user_id", "blocked_user_name", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class MutedPostSerializer(serializers.ModelSerializer):
+    """Serializer for muted posts"""
+    post_id = serializers.IntegerField(source="post.id", read_only=True)
+
+    class Meta:
+        model = MutedPost
+        fields = ["id", "post_id", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class ReportedPostSerializer(serializers.ModelSerializer):
+    """Serializer for reporting posts"""
+    post_id = serializers.IntegerField(source="post.id", read_only=True)
+    reason_display = serializers.CharField(source="get_reason_display", read_only=True)
+
+    class Meta:
+        model = ReportedPost
+        fields = ["id", "post_id", "reason", "reason_display", "description", "status", "created_at"]
+        read_only_fields = ["id", "status", "created_at"]
 
 
 

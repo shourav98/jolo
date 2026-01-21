@@ -316,6 +316,15 @@ class CommentListCreateView(APIView):
 
     def post(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
+        
+        # Check if comments are enabled on this post
+        if not feed.comments_enabled:
+            return api_response(
+                success=False, 
+                message="Comments are disabled for this post.", 
+                status_code=403
+            )
+        
         serializer = CommentSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             serializer.save(content_object=feed, comment_by=request.user.profile)
@@ -805,3 +814,190 @@ class SearchAPIView(APIView):
             "message": f"Feeds related to '{query}' fetched successfully.",
             "data": serializer.data
         })
+
+# =======================================
+# POST MENU ACTIONS
+# =======================================
+
+class ToggleCommentsView(APIView):
+    """Toggle comments on/off for a post (post owner only)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk, profile=request.user.profile)
+        
+        # Toggle comments_enabled
+        feed.comments_enabled = not feed.comments_enabled
+        feed.save(update_fields=["comments_enabled"])
+        
+        return api_response(
+            message=f"Comments {'enabled' if feed.comments_enabled else 'disabled'} successfully.",
+            data={
+                "feed_id": feed.id,
+                "comments_enabled": feed.comments_enabled
+            }
+        )
+
+
+class CopyLinkView(APIView):
+    """Generate shareable link for a post"""
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        
+        # Build absolute URL for the post
+        post_url = request.build_absolute_uri(f"/api/feed/{feed.id}/")
+        
+        return api_response(
+            message="Post link generated successfully.",
+            data={
+                "feed_id": feed.id,
+                "link": post_url
+            }
+        )
+
+
+class MutePostToggleView(APIView):
+    """Mute/unmute a post (viewer action)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from apps.feed.models import MutedPost
+        
+        feed = get_object_or_404(Feed, id=pk)
+        user_profile = request.user.profile
+        
+        # Check if already muted
+        muted_post = MutedPost.objects.filter(user=user_profile, post=feed).first()
+        
+        if muted_post:
+            # Unmute
+            muted_post.delete()
+            return api_response(
+                message="Post unmuted successfully.",
+                data={
+                    "feed_id": feed.id,
+                    "is_muted": False
+                }
+            )
+        else:
+            # Mute
+            MutedPost.objects.create(user=user_profile, post=feed)
+            return api_response(
+                message="Post muted successfully.",
+                data={
+                    "feed_id": feed.id,
+                    "is_muted": True
+                }
+            )
+
+
+class ReportPostView(APIView):
+    """Report a post (viewer action)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        from apps.feed.models import ReportedPost, REPORT_REASONS
+        from apps.feed.serializers import ReportedPostSerializer
+        
+        feed = get_object_or_404(Feed, id=pk)
+        user_profile = request.user.profile
+        
+        # Get reason and description from request
+        reason = request.data.get("reason", "").strip()
+        description = request.data.get("description", "").strip()
+        
+        # Validate reason
+        valid_reasons = [r[0] for r in REPORT_REASONS]
+        if not reason or reason not in valid_reasons:
+            return api_response(
+                success=False,
+                message=f"Invalid reason. Must be one of: {', '.join(valid_reasons)}",
+                status_code=400
+            )
+        
+        # Check if user already reported this post
+        existing_report = ReportedPost.objects.filter(
+            reporter=user_profile, 
+            post=feed
+        ).first()
+        
+        if existing_report:
+            return api_response(
+                success=False,
+                message="You have already reported this post.",
+                status_code=400
+            )
+        
+        # Create report
+        report = ReportedPost.objects.create(
+            reporter=user_profile,
+            post=feed,
+            reason=reason,
+            description=description
+        )
+        
+        serializer = ReportedPostSerializer(report)
+        
+        return api_response(
+            message="Post reported successfully. Our team will review it.",
+            data=serializer.data,
+            status_code=201
+        )
+
+
+class BlockUserToggleView(APIView):
+    """Block/unblock a user (viewer action)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, user_id):
+        from apps.feed.models import BlockedUser
+        
+        blocker = request.user.profile
+        blocked_user = get_object_or_404(UserProfile, id=user_id)
+        
+        # Prevent self-blocking
+        if blocker == blocked_user:
+            return api_response(
+                success=False,
+                message="You cannot block yourself.",
+                status_code=400
+            )
+        
+        # Check if already blocked
+        block_relation = BlockedUser.objects.filter(
+            blocker=blocker, 
+            blocked=blocked_user
+        ).first()
+        
+        if block_relation:
+            # Unblock
+            block_relation.delete()
+            return api_response(
+                message="User unblocked successfully.",
+                data={
+                    "user_id": blocked_user.id,
+                    "user_name": blocked_user.user.name,
+                    "is_blocked": False
+                }
+            )
+        else:
+            # Block user
+            BlockedUser.objects.create(blocker=blocker, blocked=blocked_user)
+            
+            # Also unfollow if currently following
+            Follow.objects.filter(
+                follower=blocker, 
+                following=blocked_user
+            ).delete()
+            
+            return api_response(
+                message="User blocked successfully.",
+                data={
+                    "user_id": blocked_user.id,
+                    "user_name": blocked_user.user.name,
+                    "is_blocked": True
+                }
+            )
