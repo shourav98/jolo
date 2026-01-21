@@ -25,13 +25,54 @@
       margin: 0 auto;
     }
 
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 600;
-      color: #ffffff;
-      margin-bottom: 24px;
-      text-align: center;
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
     }
+
+    .back-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 0;
+      color: #e5e7eb;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .back-btn:active {
+      background: rgba(255, 255, 255, 0.10);
+    }
+
+    .page-header {
+      margin-bottom: 18px;
+    }
+
+    .page-title {
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: #e9d5ff;
+      line-height: 1.1;
+      text-align: left;
+    }
+
+    .page-subtitle {
+      margin-top: 8px;
+      font-size: 0.98rem;
+      color: #a1a1aa;
+    }
+
+    /* (deprecated) h1 styling kept out intentionally; Figma header uses .page-title */
 
     .warning {
       background: #78350f;
@@ -128,6 +169,18 @@
 <body>
 
   <div class="container">
+
+    <div class="topbar">
+      <button class="back-btn" type="button" onclick="history.back()" aria-label="Back">
+        ←
+      </button>
+      <div class="page-header">
+        <div class="page-title">Request Data Deletion</div>
+        <div class="page-subtitle">
+          Request removal of your personal data from Whysper.
+        </div>
+      </div>
+    </div>
 
     {% if messages %}
       <div class="messages">
