@@ -2,7 +2,8 @@ from django.contrib import admin
 from unfold.admin import ModelAdmin
 from .models import (
     Feed, FeedFile, Comment, Like, Follow,
-    Unlock, FeedTip, Story, StoryItem, TopFan
+    Unlock, FeedTip, Story, StoryItem, TopFan,
+    BlockedUser, MutedPost, ReportedPost
 )
 
 
@@ -111,3 +112,49 @@ class TopFanAdmin(ModelAdmin):
     ordering = ("-score", "-last_interacted")
     readonly_fields = ("last_interacted",)
     list_per_page = 50
+
+
+# ---------- BLOCKED USER ----------
+@admin.register(BlockedUser)
+class BlockedUserAdmin(ModelAdmin):
+    list_display = ("blocker", "blocked", "created_at")
+    search_fields = ("blocker__user__name", "blocked__user__name")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- MUTED POST ----------
+@admin.register(MutedPost)
+class MutedPostAdmin(ModelAdmin):
+    list_display = ("user", "post", "created_at")
+    search_fields = ("user__user__name", "post__id")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+
+
+# ---------- REPORTED POST ----------
+@admin.register(ReportedPost)
+class ReportedPostAdmin(ModelAdmin):
+    list_display = ("reporter", "post", "reason", "status", "created_at")
+    search_fields = ("reporter__user__name", "post__id", "reason")
+    list_filter = ("status", "reason", "created_at")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
+    list_per_page = 50
+    
+    actions = ["mark_as_reviewed", "mark_as_resolved"]
+    
+    def mark_as_reviewed(self, request, queryset):
+        from django.utils import timezone
+        queryset.update(status="reviewed", reviewed_at=timezone.now())
+        self.message_user(request, f"{queryset.count()} reports marked as reviewed.")
+    mark_as_reviewed.short_description = "Mark selected reports as reviewed"
+    
+    def mark_as_resolved(self, request, queryset):
+        from django.utils import timezone
+        queryset.update(status="resolved", reviewed_at=timezone.now())
+        self.message_user(request, f"{queryset.count()} reports marked as resolved.")
+    mark_as_resolved.short_description = "Mark selected reports as resolved"
+

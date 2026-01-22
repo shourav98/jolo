@@ -17,6 +17,7 @@ class Feed(models.Model):
     content = models.TextField(blank=True, default="")
     status = models.CharField(max_length=16, choices=FEED_STATUS, default="public")
     unlock_price = models.PositiveIntegerField(default=0, help_text="Coins required if status=locked")
+    comments_enabled = models.BooleanField(default=True, help_text="Allow comments on this post")
 
     total_like = models.PositiveIntegerField(default=0)
     total_unlike = models.PositiveIntegerField(default=0)
@@ -352,3 +353,82 @@ class TopFan(models.Model):
 
     def __str__(self):
         return f"{self.fan.user.name} → {self.creator.user.name} ({self.score})"
+
+
+# User Blocking
+
+class BlockedUser(models.Model):
+    """Track user blocking relationships - blocked users won't see each other's content"""
+    blocker = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="blocked_users")
+    blocked = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="blocked_by")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = ("blocker", "blocked")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["blocker", "blocked"]),
+        ]
+
+    def __str__(self):
+        return f"{self.blocker.user.name} blocked {self.blocked.user.name}"
+
+
+# Post Muting
+
+class MutedPost(models.Model):
+    """Track muted posts per user - muted posts won't appear in user's feed"""
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="muted_posts")
+    post = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="muted_by")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = ("user", "post")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["user", "post"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.user.name} muted post #{self.post.id}"
+
+
+# Post Reporting
+
+REPORT_REASONS = (
+    ("harassment", "Harassment or Bullying"),
+    ("spam", "Spam or Misleading"),
+    ("violence", "Violence or Dangerous Organizations"),
+    ("adult_content", "Adult Content"),
+    ("false_info", "False Information"),
+    ("hate_speech", "Hate Speech"),
+    ("other", "Other"),
+)
+
+REPORT_STATUS = (
+    ("pending", "Pending Review"),
+    ("reviewed", "Reviewed"),
+    ("resolved", "Resolved"),
+)
+
+
+class ReportedPost(models.Model):
+    """Track post reports for moderation"""
+    reporter = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="reported_posts")
+    post = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="reports")
+    reason = models.CharField(max_length=32, choices=REPORT_REASONS)
+    description = models.TextField(blank=True, null=True, help_text="Optional additional details")
+    status = models.CharField(max_length=16, choices=REPORT_STATUS, default="pending")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["post", "reporter"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reporter.user.name} reported post #{self.post.id} for {self.get_reason_display()}"
+
