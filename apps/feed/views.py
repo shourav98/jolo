@@ -1001,3 +1001,30 @@ class BlockUserToggleView(APIView):
                     "is_blocked": True
                 }
             )
+
+
+class BlockedUsersListView(APIView):
+    """Get list of all blocked users for the current user"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.feed.models import BlockedUser
+        from apps.feed.serializers import BlockedUserSerializer
+        
+        blocker = request.user.profile
+        
+        # Get all users blocked by current user
+        blocked_users = BlockedUser.objects.filter(
+            blocker=blocker
+        ).select_related('blocked', 'blocked__user').order_by('-created_at')
+        
+        serializer = BlockedUserSerializer(blocked_users, many=True)
+        
+        return api_response(
+            message="Blocked users retrieved successfully.",
+            data={
+                "total_blocked": blocked_users.count(),
+                "blocked_users": serializer.data
+            }
+        )
+

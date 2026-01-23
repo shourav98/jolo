@@ -77,6 +77,13 @@
 - **Response:** Returns `is_blocked` status (true/false)
 - **Note:** Automatically unfollows when blocking
 
+### 9. Get Blocked Users List
+- **Endpoint:** `GET /blocked-users/`
+- **Auth:** Required
+- **Body:** None
+- **Response:** Returns list of all blocked users with profile information
+- **Fields:** user_id, name, photo, bio, blocked_at
+
 ---
 
 ## Additional Endpoints
