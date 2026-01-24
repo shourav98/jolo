@@ -357,3 +357,47 @@ class ReportedPostSerializer(serializers.ModelSerializer):
 #                 return request.build_absolute_uri(prof.url)
 #             return prof.url
 #         return None
+
+
+# Friend Suggestion Serializers
+
+class SuggestedFriendSerializer(serializers.Serializer):
+    """Serializer for suggested friends"""
+    user_id = serializers.IntegerField(source="suggested_user.id")
+    name = serializers.CharField(source="suggested_user.user.name")
+    bio = serializers.CharField(source="suggested_user.bio")
+    profile_photo = serializers.SerializerMethodField()
+    total_score = serializers.FloatField()
+    reason = serializers.CharField()
+    mutual_followers = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+    
+    def get_profile_photo(self, obj):
+        """Get profile photo URL"""
+        photo = getattr(obj.suggested_user, "profile_photo", None)
+        if photo:
+            from cloudinary.utils import cloudinary_url
+            url, _ = cloudinary_url(photo)
+            return url
+        return None
+    
+    def get_mutual_followers(self, obj):
+        """Count mutual followers"""
+        from apps.feed.models import Follow
+        user = self.context.get('request').user.profile
+        
+        # Get user's followers
+        user_followers = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
+        
+        # Get suggested user's followers
+        suggested_followers = set(Follow.objects.filter(following=obj.suggested_user).values_list('follower_id', flat=True))
+        
+        # Count mutual
+        mutual_count = len(user_followers & suggested_followers)
+        return mutual_count
+    
+    def get_is_following(self, obj):
+        """Check if current user is following suggested user"""
+        from apps.feed.models import Follow
+        user = self.context.get('request').user.profile
+        return Follow.objects.filter(follower=user, following=obj.suggested_user).exists()

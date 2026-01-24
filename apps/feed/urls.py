@@ -35,4 +35,8 @@ urlpatterns = [
     path("user/<int:user_id>/block/", views.BlockUserToggleView.as_view(), name="user-block-toggle"),
     path("blocked-users/", views.BlockedUsersListView.as_view(), name="blocked-users-list"),
 
+    # Friend Suggestions
+    path("suggested-friends/", views.SuggestedFriendsView.as_view(), name="suggested-friends"),
+    path("profile-view/<int:user_id>/", views.ProfileViewTrackingView.as_view(), name="track-profile-view"),
+
 ]

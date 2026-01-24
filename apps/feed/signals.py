@@ -116,3 +116,41 @@ def auto_set_expiry(sender, instance, created, **kwargs):
     if created and not instance.expired_at:
         instance.expired_at = timezone.now() + timedelta(hours=24)
         instance.save(update_fields=["expired_at"])
+
+
+# =======================================
+# FRIEND SUGGESTION SIGNALS
+# =======================================
+
+@receiver(post_save, sender=Like)
+def update_scores_on_like(sender, instance, created, **kwargs):
+    """Update interaction score when user likes content"""
+    if created:
+        feed = instance.content_object
+        if isinstance(feed, Feed):
+            from apps.feed.suggestion_engine import calculate_user_suggestion_score
+            calculate_user_suggestion_score(instance.liked_by, feed.profile)
+
+
+@receiver(post_save, sender=Comment)
+def update_scores_on_comment(sender, instance, created, **kwargs):
+    """Update interaction score when user comments"""
+    if created:
+        feed = instance.content_object
+        if isinstance(feed, Feed):
+            from apps.feed.suggestion_engine import calculate_user_suggestion_score
+            calculate_user_suggestion_score(instance.comment_by, feed.profile)
+
+# Handle Follows (remove from suggestions)
+from apps.feed.models import Follow, UserInteractionScore
+
+@receiver(post_save, sender=Follow)
+def remove_suggestion_on_follow(sender, instance, created, **kwargs):
+    """Remove user from suggestions when followed"""
+    if created:
+        # Delete suggestion score if it exists
+        UserInteractionScore.objects.filter(
+            user=instance.follower, 
+            suggested_user=instance.following
+        ).delete()
+

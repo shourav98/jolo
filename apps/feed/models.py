@@ -432,3 +432,61 @@ class ReportedPost(models.Model):
     def __str__(self):
         return f"{self.reporter.user.name} reported post #{self.post.id} for {self.get_reason_display()}"
 
+
+
+# =======================================
+# FRIEND SUGGESTION SYSTEM
+# =======================================
+
+class ProfileView(models.Model):
+    """Track profile views for friend suggestions"""
+    viewer = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="profile_views_made")
+    viewed = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="profile_views_received")
+    view_count = models.IntegerField(default=1)
+    last_viewed_at = models.DateTimeField(auto_now=True, db_index=True)
+    first_viewed_at = models.DateTimeField(auto_now_add=True)
+    session_id = models.CharField(max_length=100, null=True, blank=True, help_text="Browser session ID")
+
+    class Meta:
+        unique_together = ("viewer", "viewed")
+        ordering = ("-last_viewed_at",)
+        indexes = [
+            models.Index(fields=["viewer", "-view_count"]),
+            models.Index(fields=["viewer", "-last_viewed_at"]),
+            models.Index(fields=["session_id", "-last_viewed_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.viewer.user.name} viewed {self.viewed.user.name} ({self.view_count} times)"
+
+
+class UserInteractionScore(models.Model):
+    """Store calculated interaction scores for friend suggestions"""
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="suggestion_scores")
+    suggested_user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="suggested_to")
+    
+    # Score components
+    profile_view_score = models.FloatField(default=0.0, help_text="Score from profile views")
+    like_score = models.FloatField(default=0.0, help_text="Score from likes on their content")
+    comment_score = models.FloatField(default=0.0, help_text="Score from comments on their content")
+    mutual_follow_score = models.FloatField(default=0.0, help_text="Score from mutual connections")
+    session_score = models.FloatField(default=0.0, help_text="Score from browsing patterns")
+    trending_score = models.FloatField(default=0.0, help_text="Score from trending status")
+    
+    # Total score (weighted sum)
+    total_score = models.FloatField(default=0.0, db_index=True, help_text="Total weighted score")
+    
+    # Metadata
+    last_calculated_at = models.DateTimeField(auto_now=True)
+    reason = models.CharField(max_length=255, blank=True, help_text="Primary reason for suggestion")
+
+    class Meta:
+        unique_together = ("user", "suggested_user")
+        ordering = ("-total_score",)
+        indexes = [
+            models.Index(fields=["user", "-total_score"]),
+            models.Index(fields=["-total_score"]),
+        ]
+
+    def __str__(self):
+        return f"{self.suggested_user.user.name} suggested to {self.user.user.name} (score: {self.total_score:.2f})"
