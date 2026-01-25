@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'channels',
     'django_ckeditor_5',
+     "drf_spectacular",
     # 'django.contrib.contenttypes'
     # 'corsheaders',
 
@@ -166,10 +167,19 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'project.custom_exception.custom_exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     
 }
 
-
+# api documentation settings
+SPECTACULAR_SETTINGS = {
+    'AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'SWAGGER_UI_SETTINGS': {
+        'persistAuthorization': True,
+    },
+}
 
 ###################################
 #   SIMPLE JWT CONFIG
