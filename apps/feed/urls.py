@@ -33,5 +33,10 @@ urlpatterns = [
     path("feed/<int:pk>/mute/", views.MutePostToggleView.as_view(), name="feed-mute-toggle"),
     path("feed/<int:pk>/report/", views.ReportPostView.as_view(), name="feed-report"),
     path("user/<int:user_id>/block/", views.BlockUserToggleView.as_view(), name="user-block-toggle"),
+    path("blocked-users/", views.BlockedUsersListView.as_view(), name="blocked-users-list"),
+
+    # Friend Suggestions
+    path("suggested-friends/", views.SuggestedFriendsView.as_view(), name="suggested-friends"),
+    path("profile-view/<int:user_id>/", views.ProfileViewTrackingView.as_view(), name="track-profile-view"),
 
 ]

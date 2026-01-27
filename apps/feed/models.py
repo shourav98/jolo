@@ -92,123 +92,6 @@ class FeedFile(models.Model):
 
     def __str__(self):
         return f"{self.file_type.title()} for Feed #{self.feed_id}"
-    
-
-
-
-
-# from django.db import models
-# from django.utils import timezone
-# from django.contrib.contenttypes.fields import GenericForeignKey
-# from django.contrib.contenttypes.models import ContentType
-# from django.conf import settings
-# from decimal import Decimal
-
-# from apps.account.models import UserProfile  
-
-
-# #
-# # Core choices / helpers
-
-# FEED_STATUS = (
-#     ("public", "Public"),
-#     ("followers", "Followers Only"),
-#     ("locked", "Locked Content"),
-# )
-
-
-
-# # Feed & Media
-
-# class Feed(models.Model):
-    
-#     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="feeds")
-#     content = models.TextField(blank=True, default="")  # caption / text
-#     status = models.CharField(max_length=16, choices=FEED_STATUS, default="public")
-
-#     # For locked content
-#     unlock_price = models.PositiveIntegerField(default=0, help_text="Coins required if status=locked")
-
-#     # Counters (kept hot via signals)
-#     total_like = models.PositiveIntegerField(default=0)
-#     total_comment = models.PositiveIntegerField(default=0)
-#     total_view = models.PositiveIntegerField(default=0)
-
-#     # Timestamps
-#     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     class Meta:
-#         ordering = ("-created_at",)
-#         indexes = [
-#             models.Index(fields=["status", "created_at"]),
-#             models.Index(fields=["profile", "created_at"]),
-#         ]
-
-#     def __str__(self):
-#         return f"{self.profile.user.name} • {self.status} • #{self.id}"
-
-#     #  convenience helpers 
-#     @property
-#     def author(self):
-#         return self.profile.user
-
-#     def is_locked(self) -> bool:
-#         return self.status == "locked"
-
-#     def content_type(self):
-#         return ContentType.objects.get_for_model(Feed)
-
-#     # Visibility rules
-#     def is_visible_to(self, user) -> bool:
-       
-#         if not user or not user.is_authenticated:
-#             return self.status == "public"
-
-#         if self.status == "public":
-#             return True
-
-#         viewer_profile = user.profile
-
-#         if self.profile_id == viewer_profile.id:
-#             return True  # author sees own post
-
-#         if self.status == "followers":
-#             return Follow.objects.filter(follower=viewer_profile, following=self.profile).exists()
-
-#         if self.status == "locked":
-#             return Unlock.objects.filter(fan=viewer_profile, feed=self).exists()
-
-#         return False
-
-#     def is_unlocked_for(self, user) -> bool:
-#         if not self.is_locked():
-#             return True
-#         if not user or not user.is_authenticated:
-#             return False
-#         vp = user.profile
-#         if vp.id == self.profile_id:
-#             return True
-#         return Unlock.objects.filter(fan=vp, feed=self).exists()
-
-
-# class FeedFile(models.Model):
-#     FILE_TYPE_CHOICES = (
-#         ("image", "Image"),
-#         ("video", "Video"),
-#     )
-
-#     feed = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="files")
-#     file = models.URLField(null=True, blank=True)  # Store Cloudinary URL
-#     file_public_id = models.CharField(max_length=255, null=True, blank=True)  # Store Cloudinary public ID
-#     file_type = models.CharField(max_length=10, choices=FILE_TYPE_CHOICES)
-#     created_at = models.DateTimeField(auto_now_add=True)
-
-#     class Meta:
-#         ordering = ("created_at",)
-
-#     def __str__(self):
-#         return f"{self.file_type.title()} for Feed #{self.feed_id}"
 
     
 
@@ -432,3 +315,61 @@ class ReportedPost(models.Model):
     def __str__(self):
         return f"{self.reporter.user.name} reported post #{self.post.id} for {self.get_reason_display()}"
 
+
+
+# =======================================
+# FRIEND SUGGESTION SYSTEM
+# =======================================
+
+class ProfileView(models.Model):
+    """Track profile views for friend suggestions"""
+    viewer = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="profile_views_made")
+    viewed = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="profile_views_received")
+    view_count = models.IntegerField(default=1)
+    last_viewed_at = models.DateTimeField(auto_now=True, db_index=True)
+    first_viewed_at = models.DateTimeField(auto_now_add=True)
+    session_id = models.CharField(max_length=100, null=True, blank=True, help_text="Browser session ID")
+
+    class Meta:
+        unique_together = ("viewer", "viewed")
+        ordering = ("-last_viewed_at",)
+        indexes = [
+            models.Index(fields=["viewer", "-view_count"]),
+            models.Index(fields=["viewer", "-last_viewed_at"]),
+            models.Index(fields=["session_id", "-last_viewed_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.viewer.user.name} viewed {self.viewed.user.name} ({self.view_count} times)"
+
+
+class UserInteractionScore(models.Model):
+    """Store calculated interaction scores for friend suggestions"""
+    user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="suggestion_scores")
+    suggested_user = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="suggested_to")
+    
+    # Score components
+    profile_view_score = models.FloatField(default=0.0, help_text="Score from profile views")
+    like_score = models.FloatField(default=0.0, help_text="Score from likes on their content")
+    comment_score = models.FloatField(default=0.0, help_text="Score from comments on their content")
+    mutual_follow_score = models.FloatField(default=0.0, help_text="Score from mutual connections")
+    session_score = models.FloatField(default=0.0, help_text="Score from browsing patterns")
+    trending_score = models.FloatField(default=0.0, help_text="Score from trending status")
+    
+    # Total score (weighted sum)
+    total_score = models.FloatField(default=0.0, db_index=True, help_text="Total weighted score")
+    
+    # Metadata
+    last_calculated_at = models.DateTimeField(auto_now=True)
+    reason = models.CharField(max_length=255, blank=True, help_text="Primary reason for suggestion")
+
+    class Meta:
+        unique_together = ("user", "suggested_user")
+        ordering = ("-total_score",)
+        indexes = [
+            models.Index(fields=["user", "-total_score"]),
+            models.Index(fields=["-total_score"]),
+        ]
+
+    def __str__(self):
+        return f"{self.suggested_user.user.name} suggested to {self.user.user.name} (score: {self.total_score:.2f})"

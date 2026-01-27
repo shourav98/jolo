@@ -980,6 +980,7 @@ class BlockUserToggleView(APIView):
                 data={
                     "user_id": blocked_user.id,
                     "user_name": blocked_user.user.name,
+                    "profile_photo": blocked_user.profile_photo,
                     "is_blocked": False
                 }
             )
@@ -1001,3 +1002,128 @@ class BlockUserToggleView(APIView):
                     "is_blocked": True
                 }
             )
+
+
+class BlockedUsersListView(APIView):
+    """Get list of all blocked users for the current user"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.feed.models import BlockedUser
+        from apps.feed.serializers import BlockedUserSerializer
+        
+        blocker = request.user.profile
+        
+        # Get all users blocked by current user
+        blocked_users = BlockedUser.objects.filter(
+            blocker=blocker
+        ).select_related('blocked', 'blocked__user').order_by('-created_at')
+        
+        serializer = BlockedUserSerializer(blocked_users, many=True)
+        
+        return api_response(
+            message="Blocked users retrieved successfully.",
+            data={
+                "total_blocked": blocked_users.count(),
+                "blocked_users": serializer.data
+            }
+        )
+
+
+# =======================================
+# FRIEND SUGGESTION VIEWS
+# =======================================
+
+class SuggestedFriendsView(APIView):
+    """
+    Get ranked friend suggestions based on user behavior.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.feed.suggestion_engine import get_suggested_friends, recalculate_all_scores_for_user
+        from apps.feed.serializers import SuggestedFriendSerializer
+        from apps.feed.models import UserInteractionScore
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        user = request.user.profile
+        
+        # Check if we need to recalculate scores (e.g., if no scores or last calc was long ago)
+        # For now, doing a quick check if user has any scores
+        has_scores = UserInteractionScore.objects.filter(user=user).exists()
+        
+        # If no scores exist, run initial calculation
+        if not has_scores:
+            recalculate_all_scores_for_user(user)
+        
+        # Get suggestions
+        suggestions = get_suggested_friends(user, limit=20)
+        
+        # If still no suggestions (new user), force recalculation including trending
+        if not suggestions:
+            recalculate_all_scores_for_user(user)
+            suggestions = get_suggested_friends(user, limit=20)
+        
+        serializer = SuggestedFriendSerializer(suggestions, many=True, context={'request': request})
+        
+        return api_response(
+            message="Friend suggestions retrieved successfully.",
+            data={
+                "total_suggestions": len(suggestions),
+                "suggestions": serializer.data
+            }
+        )
+
+
+class ProfileViewTrackingView(APIView):
+    """
+    Track when a user views another user's profile.
+    Updates the weighted interaction score.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, user_id):
+        from apps.feed.models import ProfileView
+        from apps.account.models import UserProfile
+        from apps.feed.suggestion_engine import calculate_user_suggestion_score
+        
+        viewer = request.user.profile
+        
+        try:
+            viewed = UserProfile.objects.get(user__id=user_id)
+        except UserProfile.DoesNotExist:
+             return api_response(success=False, message="User not found", status_code=404)
+             
+        # Don't track self-views
+        if viewer == viewed:
+             return api_response(success=False, message="Cannot track self-view", status_code=400)
+        
+        # Get or create profile view record
+        profile_view, created = ProfileView.objects.get_or_create(
+            viewer=viewer,
+            viewed=viewed,
+            defaults={'view_count': 1}
+        )
+        
+        if not created:
+            # Increment view count
+            profile_view.view_count += 1
+            profile_view.save()
+            
+        # Update session ID if provided
+        session_id = request.data.get('session_id')
+        if session_id:
+            profile_view.session_id = session_id
+            profile_view.save()
+            
+        # Trigger score recalculation for this pair
+        calculate_user_suggestion_score(viewer, viewed)
+        
+        return api_response(
+            message="Profile view tracked successfully.",
+            data={
+                "view_count": profile_view.view_count,
+                "viewed_user": viewed.user.name
+            }
+        )

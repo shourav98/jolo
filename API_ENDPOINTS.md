@@ -77,6 +77,23 @@
 - **Response:** Returns `is_blocked` status (true/false)
 - **Note:** Automatically unfollows when blocking
 
+### 9. Get Blocked Users List
+- **Endpoint:** `GET /blocked-users/`
+- **Auth:** Required
+- **Body:** None
+- **Response:** Returns list of all blocked users with profile information
+- **Fields:** user_id, name, photo, bio, blocked_at
+
+### 10. Get Suggested Friends
+- **Endpoint:** `GET /suggested-friends/`
+- **Auth:** Required
+- **Response:** Ranked list based on behavior (views, likes, mutuals)
+
+### 11. Track Profile View
+- **Endpoint:** `POST /profile-view/{user_id}/`
+- **Auth:** Required
+- **Purpose:** Increases interaction score for the viewed user
+
 ---
 
 ## Additional Endpoints
