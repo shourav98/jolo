@@ -980,6 +980,7 @@ class BlockUserToggleView(APIView):
                 data={
                     "user_id": blocked_user.id,
                     "user_name": blocked_user.user.name,
+                    "profile_photo": blocked_user.profile_photo,
                     "is_blocked": False
                 }
             )
