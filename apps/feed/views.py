@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 
 
 from apps.feed.models import (
-    Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
+    Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem, ReportedPost
 )
 from apps.feed.serializers import (
     FeedSerializer, CommentSerializer, TopFanSerializer
@@ -893,58 +893,7 @@ class MutePostToggleView(APIView):
             )
 
 
-class ReportPostView(APIView):
-    """Report a post (viewer action)"""
-    permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, pk):
-        from apps.feed.models import ReportedPost, REPORT_REASONS
-        from apps.feed.serializers import ReportedPostSerializer
-        
-        feed = get_object_or_404(Feed, id=pk)
-        user_profile = request.user.profile
-        
-        # Get reason and description from request
-        reason = request.data.get("reason", "").strip()
-        description = request.data.get("description", "").strip()
-        
-        # Validate reason
-        valid_reasons = [r[0] for r in REPORT_REASONS]
-        if not reason or reason not in valid_reasons:
-            return api_response(
-                success=False,
-                message=f"Invalid reason. Must be one of: {', '.join(valid_reasons)}",
-                status_code=400
-            )
-        
-        # Check if user already reported this post
-        existing_report = ReportedPost.objects.filter(
-            reporter=user_profile, 
-            post=feed
-        ).first()
-        
-        if existing_report:
-            return api_response(
-                success=False,
-                message="You have already reported this post.",
-                status_code=400
-            )
-        
-        # Create report
-        report = ReportedPost.objects.create(
-            reporter=user_profile,
-            post=feed,
-            reason=reason,
-            description=description
-        )
-        
-        serializer = ReportedPostSerializer(report)
-        
-        return api_response(
-            message="Post reported successfully. Our team will review it.",
-            data=serializer.data,
-            status_code=201
-        )
 
 
 class BlockUserToggleView(APIView):
@@ -999,6 +948,7 @@ class BlockUserToggleView(APIView):
                 data={
                     "user_id": blocked_user.id,
                     "user_name": blocked_user.user.name,
+                    "profile_photo": blocked_user.profile_photo,
                     "is_blocked": True
                 }
             )
@@ -1126,4 +1076,66 @@ class ProfileViewTrackingView(APIView):
                 "view_count": profile_view.view_count,
                 "viewed_user": viewed.user.name
             }
+        )
+
+
+# =======================================
+# REPORT POST
+# =======================================
+
+class ReportPostView(APIView):
+    """
+    Allow users to report a post with one or multiple reasons.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        reporter = request.user.profile
+        
+        reasons = request.data.get("reasons", [])
+        description = request.data.get("description", "")
+        
+        # Validate reasons
+        if not reasons:
+            return api_response(success=False, message="At least one reason is required.", status_code=400)
+        
+        # Ensure reasons is a list
+        if not isinstance(reasons, list):
+            # If it's a string, try to split if comma separated, or just wrap in list
+            if isinstance(reasons, str) and ',' in reasons:
+                 reasons = [r.strip() for r in reasons.split(',')]
+            else:
+                 reasons = [reasons]
+
+        # Check if user already reported this post
+        existing_report = ReportedPost.objects.filter(
+            reporter=reporter, 
+            post=feed
+        ).exists()
+        
+        if existing_report:
+            return api_response(
+                success=False,
+                message="You have already reported this post.",
+                status_code=400
+            )
+
+        # Create report
+        report = ReportedPost.objects.create(
+            reporter=reporter,
+            post=feed,
+            reason=reasons,
+            description=description,
+            status="pending"
+        )
+        
+        # Use serializer for response
+        from apps.feed.serializers import ReportedPostSerializer
+        serializer = ReportedPostSerializer(report)
+        
+        return api_response(
+            message="Post reported successfully.",
+            data=serializer.data,
+            status_code=201
         )

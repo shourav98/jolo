@@ -183,12 +183,24 @@ class MutedPostSerializer(serializers.ModelSerializer):
 class ReportedPostSerializer(serializers.ModelSerializer):
     """Serializer for reporting posts"""
     post_id = serializers.IntegerField(source="post.id", read_only=True)
-    reason_display = serializers.CharField(source="get_reason_display", read_only=True)
+    reason_display = serializers.SerializerMethodField()
 
     class Meta:
         model = ReportedPost
         fields = ["id", "post_id", "reason", "reason_display", "description", "status", "created_at"]
         read_only_fields = ["id", "status", "created_at"]
+
+    def get_reason_display(self, obj):
+        from apps.feed.models import REPORT_REASONS
+        reason_dict = dict(REPORT_REASONS)
+        
+        # If reason is a list, map each one
+        if isinstance(obj.reason, list):
+            labels = [reason_dict.get(r, r) for r in obj.reason]
+            return ", ".join(labels)
+        
+        # If reason is a string (legacy data or single value stored as string)
+        return reason_dict.get(obj.reason, obj.reason)
 
 
 

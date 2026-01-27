@@ -138,13 +138,14 @@ class MutedPostAdmin(ModelAdmin):
 @admin.register(ReportedPost)
 class ReportedPostAdmin(ModelAdmin):
     list_display = ("reporter", "post", "reason", "status", "created_at")
-    search_fields = ("reporter__user__name", "post__id", "reason")
-    list_filter = ("status", "reason", "created_at")
+    search_fields = ("reporter__user__name", "post__id")
+    list_filter = ("status", "created_at")
     readonly_fields = ("created_at",)
     ordering = ("-created_at",)
     list_per_page = 50
     
-    actions = ["mark_as_reviewed", "mark_as_resolved"]
+    list_editable = ("status",)
+    actions = ["mark_as_reviewed", "mark_as_resolved", "mark_as_dismissed"]
     
     def mark_as_reviewed(self, request, queryset):
         from django.utils import timezone
@@ -157,4 +158,10 @@ class ReportedPostAdmin(ModelAdmin):
         queryset.update(status="resolved", reviewed_at=timezone.now())
         self.message_user(request, f"{queryset.count()} reports marked as resolved.")
     mark_as_resolved.short_description = "Mark selected reports as resolved"
+
+    def mark_as_dismissed(self, request, queryset):
+        from django.utils import timezone
+        queryset.update(status="dismissed", reviewed_at=timezone.now())
+        self.message_user(request, f"{queryset.count()} reports marked as dismissed.")
+    mark_as_dismissed.short_description = "Mark selected reports as dismissed"
 
