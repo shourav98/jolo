@@ -155,9 +155,11 @@ class BlockedUserSerializer(serializers.ModelSerializer):
     blocked_user_photo = serializers.SerializerMethodField()
     blocked_user_bio = serializers.CharField(source="blocked.bio", read_only=True)
 
+    is_blocked = serializers.SerializerMethodField()
+
     class Meta:
         model = BlockedUser
-        fields = ["id", "blocked_user_id", "blocked_user_name", "blocked_user_photo", "blocked_user_bio", "created_at"]
+        fields = ["id", "blocked_user_id", "blocked_user_name", "blocked_user_photo", "blocked_user_bio", "created_at", "is_blocked"]
         read_only_fields = ["id", "created_at"]
     
     def get_blocked_user_photo(self, obj):
@@ -168,6 +170,9 @@ class BlockedUserSerializer(serializers.ModelSerializer):
             url, _ = cloudinary_url(photo)
             return url
         return None
+
+    def get_is_blocked(self, obj):
+        return True
 
 
 class MutedPostSerializer(serializers.ModelSerializer):
