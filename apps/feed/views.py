@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 
 
 from apps.feed.models import (
-    Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem
+    Feed, FeedFile, Comment, Like, Follow, Unlock, FeedTip, TopFan, Story, StoryItem, ReportedPost, BlockedUser
 )
 from apps.feed.serializers import (
     FeedSerializer, CommentSerializer, TopFanSerializer
@@ -55,10 +55,18 @@ class FeedListCreateView(APIView):
         else:
             profile = user.profile
             following_profiles = profile.following.values("following")
+            # Exclude blocked users (both ways)
+            blocked_users = BlockedUser.objects.filter(blocker=profile).values_list('blocked', flat=True)
+            blocked_by_users = BlockedUser.objects.filter(blocked=profile).values_list('blocker', flat=True)
+
             feeds = Feed.objects.filter(
                 models.Q(status="public")
                 | models.Q(profile=profile)
                 | models.Q(status="followers", profile__in=following_profiles)
+            ).exclude(
+                profile__in=blocked_users
+            ).exclude(
+                profile__in=blocked_by_users
             ).distinct().order_by("-created_at")
 
         serializer = FeedSerializer(feeds, many=True, context={"request": request})
@@ -131,6 +139,19 @@ class FeedDetailView(APIView):
 
     def get(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
+        
+        # Check if user is blocked (both ways)
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            is_blocked = BlockedUser.objects.filter(
+                models.Q(blocker=profile, blocked=feed.profile) |
+                models.Q(blocker=feed.profile, blocked=profile)
+            ).exists()
+            
+            if is_blocked:
+                # Return 404 to hide existence
+                return api_response(success=False, message="Feed not found.", status_code=404)
+
         serializer = FeedSerializer(feed, context={"request": request})
         return api_response(data=serializer.data)
 
@@ -311,6 +332,13 @@ class CommentListCreateView(APIView):
     def get(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
         comments = Comment.objects.filter(object_id=feed.id).order_by("-created_at")
+        
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            blocked_users = BlockedUser.objects.filter(blocker=profile).values_list('blocked', flat=True)
+            blocked_by_users = BlockedUser.objects.filter(blocked=profile).values_list('blocker', flat=True)
+            comments = comments.exclude(comment_by__in=blocked_users).exclude(comment_by__in=blocked_by_users)
+
         serializer = CommentSerializer(comments, many=True, context={"request": request})
         return api_response(data=serializer.data)
 
@@ -380,6 +408,13 @@ class UnlockFeed(APIView):
     def post(self, request, pk):
         feed = get_object_or_404(Feed, id=pk)
         fan = request.user
+        
+        # Check blocking
+        if BlockedUser.objects.filter(
+            models.Q(blocker=fan.profile, blocked=feed.profile) |
+            models.Q(blocker=feed.profile, blocked=fan.profile)
+        ).exists():
+            return api_response(success=False, message="Feed not found.", status_code=404)
 
         if feed.status != "locked":
             return api_response(success=False, message="Feed is already public.", status_code=400)
@@ -427,6 +462,13 @@ class FollowToggle(APIView):
         if fan == creator:
             return api_response(success=False, message="You cannot follow yourself.", status_code=400)
 
+        # Check blocking
+        if BlockedUser.objects.filter(
+            models.Q(blocker=fan, blocked=creator) |
+            models.Q(blocker=creator, blocked=fan)
+        ).exists():
+            return api_response(success=False, message="User not found.", status_code=404)
+
         # Prevent race-condition duplicates
         relation, created = Follow.objects.get_or_create(follower=fan, following=creator)
 
@@ -449,6 +491,14 @@ class TipCreatorView(APIView):
     def post(self, request, creator_id):
         fan = request.user
         creator = get_object_or_404(UserProfile, id=creator_id)
+        
+        # Check blocking
+        if BlockedUser.objects.filter(
+            models.Q(blocker=fan.profile, blocked=creator) |
+            models.Q(blocker=creator, blocked=fan.profile)
+        ).exists():
+            return api_response(success=False, message="User not found.", status_code=404)
+
         coins = int(request.data.get("coins", 0))
 
         if coins <= 0:
@@ -491,7 +541,15 @@ class CreatorTopFansView(APIView):
 
     def get(self, request, creator_id):
         creator = get_object_or_404(UserProfile, id=creator_id)
-        fans = TopFan.objects.filter(creator=creator, status="active").order_by("-score")[:20]
+        fans = TopFan.objects.filter(creator=creator, status="active")
+        
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            blocked_users = BlockedUser.objects.filter(blocker=profile).values_list('blocked', flat=True)
+            blocked_by_users = BlockedUser.objects.filter(blocked=profile).values_list('blocker', flat=True)
+            fans = fans.exclude(fan__in=blocked_users).exclude(fan__in=blocked_by_users)
+
+        fans = fans.order_by("-score")[:20]
         serializer = TopFanSerializer(fans, many=True, context={"request": request})
         return api_response(data=serializer.data)
 
@@ -501,7 +559,14 @@ class MyTopCreatorsView(APIView):
 
     def get(self, request):
         fan = request.user.profile
-        creators = TopFan.objects.filter(fan=fan, status="active").order_by("-score")
+        creators = TopFan.objects.filter(fan=fan, status="active")
+        
+        # Exclude blocked users (both ways)
+        blocked_users = BlockedUser.objects.filter(blocker=fan).values_list('blocked', flat=True)
+        blocked_by_users = BlockedUser.objects.filter(blocked=fan).values_list('blocker', flat=True)
+        creators = creators.exclude(creator__in=blocked_users).exclude(creator__in=blocked_by_users)
+
+        creators = creators.order_by("-score")
         serializer = TopFanSerializer(creators, many=True, context={"request": request})
         return api_response(data=serializer.data)
 
@@ -513,7 +578,14 @@ class MyTopFanListView(APIView):
 
     def get(self, request):
         creator = request.user.profile
-        fans = TopFan.objects.filter(creator=creator, status="active").order_by("-score")
+        fans = TopFan.objects.filter(creator=creator, status="active")
+        
+        # Exclude blocked users (both ways)
+        blocked_users = BlockedUser.objects.filter(blocker=creator).values_list('blocked', flat=True)
+        blocked_by_users = BlockedUser.objects.filter(blocked=creator).values_list('blocker', flat=True)
+        fans = fans.exclude(fan__in=blocked_users).exclude(fan__in=blocked_by_users)
+
+        fans = fans.order_by("-score")
         serializer = TopFanSerializer(fans, many=True, context={"request": request})
         
         data = {
@@ -559,8 +631,16 @@ class StoryView(APIView):
         following = profile.following.values_list("following_id", flat=True)
         now = timezone.now()
 
+        # Exclude blocked users from stories
+        blocked_users = BlockedUser.objects.filter(blocker=profile).values_list('blocked', flat=True)
+        blocked_by_users = BlockedUser.objects.filter(blocked=profile).values_list('blocker', flat=True)
+
         stories = Story.objects.filter(
             models.Q(profile=profile) | models.Q(profile__in=following)
+        ).exclude(
+            profile__in=blocked_users
+        ).exclude(
+            profile__in=blocked_by_users
         ).order_by("-created_at")
 
         data = []
@@ -796,15 +876,32 @@ class SearchAPIView(APIView):
             }, status=400)
 
         # 🔍 Step 1: Find users whose name matches query
-        matched_profiles = UserProfile.objects.filter(
+        user_queryset = UserProfile.objects.filter(
             user__name__icontains=query
-        ).values_list("id", flat=True)
+        )
+        
+        # Filter blocked users if authenticated
+        blocked_ids = []
+        if request.user.is_authenticated:
+            profile = request.user.profile
+            blocked_users = BlockedUser.objects.filter(blocker=profile).values_list('blocked', flat=True)
+            blocked_by_users = BlockedUser.objects.filter(blocked=profile).values_list('blocker', flat=True)
+            blocked_ids = list(blocked_users) + list(blocked_by_users)
+            
+            user_queryset = user_queryset.exclude(id__in=blocked_ids)
+
+        matched_profiles = user_queryset.values_list("id", flat=True)
 
         # 🔍 Step 2: Find feeds related to either content OR those users
         feeds = Feed.objects.filter(
             Q(profile_id__in=matched_profiles) |
             Q(content__icontains=query)
-        ).select_related("profile", "profile__user").prefetch_related("files").order_by("-created_at")[offset:offset + limit]
+        )
+        
+        if request.user.is_authenticated:
+            feeds = feeds.exclude(profile_id__in=blocked_ids)
+            
+        feeds = feeds.select_related("profile", "profile__user").prefetch_related("files").order_by("-created_at")[offset:offset + limit]
 
         serializer = FeedSerializer(feeds, many=True, context={"request": request})
 
@@ -893,58 +990,7 @@ class MutePostToggleView(APIView):
             )
 
 
-class ReportPostView(APIView):
-    """Report a post (viewer action)"""
-    permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, pk):
-        from apps.feed.models import ReportedPost, REPORT_REASONS
-        from apps.feed.serializers import ReportedPostSerializer
-        
-        feed = get_object_or_404(Feed, id=pk)
-        user_profile = request.user.profile
-        
-        # Get reason and description from request
-        reason = request.data.get("reason", "").strip()
-        description = request.data.get("description", "").strip()
-        
-        # Validate reason
-        valid_reasons = [r[0] for r in REPORT_REASONS]
-        if not reason or reason not in valid_reasons:
-            return api_response(
-                success=False,
-                message=f"Invalid reason. Must be one of: {', '.join(valid_reasons)}",
-                status_code=400
-            )
-        
-        # Check if user already reported this post
-        existing_report = ReportedPost.objects.filter(
-            reporter=user_profile, 
-            post=feed
-        ).first()
-        
-        if existing_report:
-            return api_response(
-                success=False,
-                message="You have already reported this post.",
-                status_code=400
-            )
-        
-        # Create report
-        report = ReportedPost.objects.create(
-            reporter=user_profile,
-            post=feed,
-            reason=reason,
-            description=description
-        )
-        
-        serializer = ReportedPostSerializer(report)
-        
-        return api_response(
-            message="Post reported successfully. Our team will review it.",
-            data=serializer.data,
-            status_code=201
-        )
 
 
 class BlockUserToggleView(APIView):
@@ -999,6 +1045,7 @@ class BlockUserToggleView(APIView):
                 data={
                     "user_id": blocked_user.id,
                     "user_name": blocked_user.user.name,
+                    "profile_photo": blocked_user.profile_photo,
                     "is_blocked": True
                 }
             )
@@ -1126,4 +1173,66 @@ class ProfileViewTrackingView(APIView):
                 "view_count": profile_view.view_count,
                 "viewed_user": viewed.user.name
             }
+        )
+
+
+# =======================================
+# REPORT POST
+# =======================================
+
+class ReportPostView(APIView):
+    """
+    Allow users to report a post with one or multiple reasons.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        feed = get_object_or_404(Feed, id=pk)
+        reporter = request.user.profile
+        
+        reasons = request.data.get("reasons", [])
+        description = request.data.get("description", "")
+        
+        # Validate reasons
+        if not reasons:
+            return api_response(success=False, message="At least one reason is required.", status_code=400)
+        
+        # Ensure reasons is a list
+        if not isinstance(reasons, list):
+            # If it's a string, try to split if comma separated, or just wrap in list
+            if isinstance(reasons, str) and ',' in reasons:
+                 reasons = [r.strip() for r in reasons.split(',')]
+            else:
+                 reasons = [reasons]
+
+        # Check if user already reported this post
+        existing_report = ReportedPost.objects.filter(
+            reporter=reporter, 
+            post=feed
+        ).exists()
+        
+        if existing_report:
+            return api_response(
+                success=False,
+                message="You have already reported this post.",
+                status_code=400
+            )
+
+        # Create report
+        report = ReportedPost.objects.create(
+            reporter=reporter,
+            post=feed,
+            reason=reasons,
+            description=description,
+            status="pending"
+        )
+        
+        # Use serializer for response
+        from apps.feed.serializers import ReportedPostSerializer
+        serializer = ReportedPostSerializer(report)
+        
+        return api_response(
+            message="Post reported successfully.",
+            data=serializer.data,
+            status_code=201
         )

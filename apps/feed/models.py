@@ -279,19 +279,20 @@ class MutedPost(models.Model):
 # Post Reporting
 
 REPORT_REASONS = (
-    ("harassment", "Harassment or Bullying"),
-    ("spam", "Spam or Misleading"),
-    ("violence", "Violence or Dangerous Organizations"),
+    ("under_18", "Problem involving someone under 18"),
     ("adult_content", "Adult Content"),
-    ("false_info", "False Information"),
-    ("hate_speech", "Hate Speech"),
-    ("other", "Other"),
+    ("harassment", "Harassment"),
+    ("scam", "Scam"),
+    ("violence", "Violence"),
+    ("dislike", "I just don't like it"),
+    ("self_harm", "Suicide or self-harm"),
 )
 
 REPORT_STATUS = (
     ("pending", "Pending Review"),
     ("reviewed", "Reviewed"),
     ("resolved", "Resolved"),
+    ("dismissed", "Dismissed"),
 )
 
 
@@ -299,7 +300,7 @@ class ReportedPost(models.Model):
     """Track post reports for moderation"""
     reporter = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="reported_posts")
     post = models.ForeignKey(Feed, on_delete=models.CASCADE, related_name="reports")
-    reason = models.CharField(max_length=32, choices=REPORT_REASONS)
+    reason = models.JSONField(default=list, help_text="List of reasons for reporting")
     description = models.TextField(blank=True, null=True, help_text="Optional additional details")
     status = models.CharField(max_length=16, choices=REPORT_STATUS, default="pending")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -313,7 +314,7 @@ class ReportedPost(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.reporter.user.name} reported post #{self.post.id} for {self.get_reason_display()}"
+        return f"{self.reporter.user.name} reported post #{self.post.id}"
 
 
 
