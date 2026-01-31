@@ -37,6 +37,5 @@ urlpatterns = [
 
     # Friend Suggestions
     path("suggested-friends/", views.SuggestedFriendsView.as_view(), name="suggested-friends"),
-    path("profile-view/<int:user_id>/", views.ProfileViewTrackingView.as_view(), name="track-profile-view"),
 
 ]

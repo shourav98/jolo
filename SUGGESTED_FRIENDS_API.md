@@ -45,41 +45,101 @@ Returns a ranked list of users the current user might want to follow.
 
 ---
 
-## 2. Track Profile View
-Informs the system that a profile has been viewed, updating the ranking score.
+## 2. View User Profile (with Automatic Tracking)
+View a user's public profile. **Profile views are automatically tracked** for authenticated users to improve friend suggestions.
 
-- **URL:** `/api/v1/feed/profile-view/{user_id}/`
-- **Method:** `POST`
-- **Authentication:** Required (Bearer Token)
-
-### Request Body (Optional)
-```json
-{
-  "session_id": "optional-uuid-string"
-}
-```
+- **URL:** `/api/v1/account/profile/{profile_id}/`
+- **Method:** `GET`
+- **Authentication:** Optional (tracking only occurs for authenticated users)
 
 ### Success Response (200 OK)
 ```json
 {
+  "status": 200,
   "success": true,
-  "message": "Profile view tracked successfully.",
   "data": {
-    "view_count": 5,
-    "viewed_user": "Iva Ryan"
+    "id": 5,
+    "user": {
+      "id": 5,
+      "name": "Iva Ryan",
+      "phone": "+1234567890"
+    },
+    "bio": "Photography",
+    "profile_photo": "https://...",
+    "cover_photo": "https://...",
+    "is_creator": true,
+    "followers_count": 150,
+    "following_count": 89
   }
 }
 ```
 
+### Automatic Behavior
+- **Authenticated Users:** Profile view is automatically tracked, view count incremented, and suggestion scores updated
+- **Unauthenticated Users:** Profile data returned without tracking
+- **Self-Views:** Not tracked (viewing your own profile doesn't affect suggestions)
+
+> **Note:** The standalone `/api/v1/feed/profile-view/{user_id}/` endpoint is **deprecated** as of 2026-01-31. Profile tracking now happens automatically when viewing profiles.
+
 ---
 
 ## Behavior-Based Mechanics
-- **Real-time Recalculation:** Scores are updated instantly when a user views a profile, likes a post, or comments.
-- **Auto-Removal:** Suggested users are automatically removed from the list as soon as you follow them.
-- **Privacy/Blocking:** Blocked users (both ways) and already followed users are strictly excluded.
-- **Bonus for Recency:** Profile views within the last 24 hours provide a 1.5x multiplier to the view score.
+- **Automatic Tracking:** Profile views are automatically tracked when authenticated users view profiles via `/api/v1/account/profile/{profile_id}/`
+- **Real-time Recalculation:** Scores are updated instantly when a user views a profile, likes a post, or comments
+- **Auto-Removal:** Suggested users are automatically removed from the list as soon as you follow them
+- **Privacy/Blocking:** Blocked users (both ways) and already followed users are strictly excluded
+- **Self-View Prevention:** Viewing your own profile does not create tracking records
+- **Bonus for Recency:** Profile views within the last 24 hours provide a 1.5x multiplier to the view score
 
 ## Implementation Details
 - **Scoring Engine:** `apps/feed/suggestion_engine.py`
 - **Models:** `ProfileView`, `UserInteractionScore`
 - **Signals:** Automated triggers on `Like`, `Comment`, and `Follow` saving.
+
+---
+
+## Flutter Integration Example
+
+### Viewing a Profile (with Automatic Tracking)
+```dart
+Future<void> viewUserProfile(int profileId) async {
+  // Single API call - tracking happens automatically on backend
+  final response = await dio.get(
+    '/api/v1/account/profile/$profileId/',
+    options: Options(
+      headers: {
+        'Authorization': 'Bearer $authToken',  // Optional: include for tracking
+      },
+    ),
+  );
+  
+  if (response.statusCode == 200) {
+    final profileData = response.data['data'];
+    // Display profile to user
+    // Tracking is automatic - no additional API call needed!
+  }
+}
+```
+
+### Getting Friend Suggestions
+```dart
+Future<List<SuggestedUser>> getSuggestedFriends() async {
+  final response = await dio.get(
+    '/api/v1/feed/suggested-friends/',
+    options: Options(
+      headers: {
+        'Authorization': 'Bearer $authToken',
+      },
+    ),
+  );
+  
+  if (response.statusCode == 200) {
+    final suggestions = response.data['data']['suggestions'] as List;
+    return suggestions.map((s) => SuggestedUser.fromJson(s)).toList();
+  }
+  
+  return [];
+}
+```
+
+> **Migration Note:** If you were previously calling `/api/v1/feed/profile-view/{user_id}/` separately, you can now remove that call. Profile tracking happens automatically when you call `/api/v1/account/profile/{profile_id}/`.
