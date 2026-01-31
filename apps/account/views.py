@@ -208,6 +208,10 @@ class ProfileView(APIView):
 
 
 class PublicProfileView(APIView):
+    """
+    View a user's public profile.
+    Automatically tracks profile views for authenticated users to improve friend suggestions.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request, profile_id):
@@ -215,6 +219,34 @@ class PublicProfileView(APIView):
             UserProfile,
             id=profile_id,
         )
+
+        # Track profile view if user is authenticated
+        if request.user.is_authenticated and request.user.profile != profile:
+            from apps.feed.models import ProfileView
+            from apps.feed.suggestion_engine import calculate_user_suggestion_score
+            
+            viewer = request.user.profile
+            
+            # Get or create profile view record
+            profile_view, created = ProfileView.objects.get_or_create(
+                viewer=viewer,
+                viewed=profile,
+                defaults={'view_count': 1}
+            )
+            
+            if not created:
+                # Increment view count
+                profile_view.view_count += 1
+                profile_view.save()
+            
+            # Trigger score recalculation for this pair (async operation)
+            try:
+                calculate_user_suggestion_score(viewer, profile)
+            except Exception as e:
+                # Log error but don't fail the request
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to calculate suggestion score: {str(e)}")
 
         serializer = ProfileDetailSerializer(
             profile,

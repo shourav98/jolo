@@ -1122,60 +1122,6 @@ class SuggestedFriendsView(APIView):
             }
         )
 
-
-class ProfileViewTrackingView(APIView):
-    """
-    Track when a user views another user's profile.
-    Updates the weighted interaction score.
-    """
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, user_id):
-        from apps.feed.models import ProfileView
-        from apps.account.models import UserProfile
-        from apps.feed.suggestion_engine import calculate_user_suggestion_score
-        
-        viewer = request.user.profile
-        
-        try:
-            viewed = UserProfile.objects.get(user__id=user_id)
-        except UserProfile.DoesNotExist:
-             return api_response(success=False, message="User not found", status_code=404)
-             
-        # Don't track self-views
-        if viewer == viewed:
-             return api_response(success=False, message="Cannot track self-view", status_code=400)
-        
-        # Get or create profile view record
-        profile_view, created = ProfileView.objects.get_or_create(
-            viewer=viewer,
-            viewed=viewed,
-            defaults={'view_count': 1}
-        )
-        
-        if not created:
-            # Increment view count
-            profile_view.view_count += 1
-            profile_view.save()
-            
-        # Update session ID if provided
-        session_id = request.data.get('session_id')
-        if session_id:
-            profile_view.session_id = session_id
-            profile_view.save()
-            
-        # Trigger score recalculation for this pair
-        calculate_user_suggestion_score(viewer, viewed)
-        
-        return api_response(
-            message="Profile view tracked successfully.",
-            data={
-                "view_count": profile_view.view_count,
-                "viewed_user": viewed.user.name
-            }
-        )
-
-
 # =======================================
 # REPORT POST
 # =======================================
