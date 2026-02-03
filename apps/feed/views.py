@@ -529,6 +529,7 @@ class TipCreatorView(APIView):
                 "creator_usd": result["creator_usd"],
                 "platform_usd": result["platform_usd"],
                 "event_id": result["event_id"],
+                "is_creator": creator.is_creator,
             },
             status_code=201
         )
