@@ -32,6 +32,7 @@ class FeedSerializer(serializers.ModelSerializer):
     is_unlocked = serializers.SerializerMethodField()
     is_muted = serializers.SerializerMethodField()
     is_author_blocked = serializers.SerializerMethodField()
+    is_creator = serializers.BooleanField(source="profile.is_creator", read_only=True)
 
     class Meta:
         model = Feed
@@ -40,6 +41,7 @@ class FeedSerializer(serializers.ModelSerializer):
             "author_id",
             "author_name",
             "author_photo",
+            "is_creator",
             "content",
             "status",
             "unlock_price",
