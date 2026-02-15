@@ -24,6 +24,7 @@ import random
 from django.shortcuts import get_object_or_404
 from .models import UserProfile
 from .serializers import ProfileDetailSerializer
+from .utils import TwilioService
 
 
 
@@ -48,6 +49,8 @@ class SignupView(APIView):
             "success": False,
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 # Login
@@ -271,12 +274,23 @@ class ForgotPasswordOTPRequestView(APIView):
             try:
                 user = CustomUser.objects.get(phone=phone)
             except CustomUser.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error": "User with this phone number not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            otp_code = str(random.randint(10000, 99999))
+            # Generate 4-digit OTP (matching signup and user preference)
+            otp_code = str(random.randint(1000, 9999))
+            
+            # Use OTPVerification model for history/tracking
             OTPVerification.objects.create(user=user, otp=otp_code, purpose="reset")
 
-            return Response({"message": "OTP sent successfully", "otp": otp_code})
+            # Send OTP via Twilio
+            TwilioService.send_otp(phone, otp_code)
+
+            return Response({
+                "status": 200,
+                "success": True,
+                "message": "OTP sent successfully", 
+                "otp": otp_code  # For testing only
+            })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -305,20 +319,28 @@ class ForgotPasswordOTPVerifyView(APIView):
                 otp_obj.delete()
                 return Response({"error": "OTP expired"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Mark as used
             otp_obj.is_used = True
             otp_obj.save()
 
-            # Generate reset token
-            reset_token = str(uuid.uuid4())
-
-            # Store token in cache (key=token, value=user_id)
-            cache.set(reset_token, user.id, timeout=300)  
+            # Generate reset token as JWT
+            import time
+            payload = {
+                "user_id": user.id,
+                "token_type": "password_reset",
+                "iat": int(time.time()),
+                "exp": int(time.time()) + 600  # 10 minutes
+            }
+            reset_token = jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+            
+            # Store token in cache for one-time use (blacklisting logic)
+            cache.set(f"password_reset_token_{reset_token}", user.id, timeout=600)  
 
             return Response({
                 "status": 200,
                 "success": True,
-                "message": "OTP verified successfully.",
-                "reset_token": reset_token
+                "message": "OTP verified successfully. Use the token to reset password.",
+                "token": reset_token
             }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -327,40 +349,82 @@ class ForgotPasswordOTPVerifyView(APIView):
 
 class ForgotPasswordResetView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
-        reset_token = request.data.get('reset_token')
-        new_password = request.data.get('new_password')
-        confirm_password = request.data.get('confirm_password')
-
-        if not reset_token:
-            return Response({"error": "Reset token is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if new_password != confirm_password:
-            return Response({"error": "Passwords do not match"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Get user_id from cache
-        user_id = cache.get(reset_token)
-        if not user_id:
-            return Response({"error": "Invalid or expired reset token"}, status=status.HTTP_400_BAD_REQUEST)
+        token = request.headers.get('Authorization')
+        
+        if not token or not token.startswith('Bearer '):
+            return Response({
+                "status": 400,
+                "success": False,
+                "message": "Authorization header missing or invalid. Format: Bearer <token>"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        token = token.split(' ')[1]
 
         try:
-            user = CustomUser.objects.get(id=user_id)
-        except CustomUser.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            # Decode and verify JWT
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            
+            # Verify token type
+            if payload.get("token_type") != "password_reset":
+                return Response({
+                    "status": 400,
+                    "success": False,
+                    "message": "Invalid token type."
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            user_id = payload.get("user_id")
+            
+            # Verify one-time use via cache
+            if not cache.get(f"password_reset_token_{token}"):
+                return Response({
+                    "status": 400,
+                    "success": False,
+                    "message": "Token has already been used or expired."
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-        #  Reset password
-        user.set_password(new_password)
-        user.save()
+        except jwt.ExpiredSignatureError:
+            return Response({
+                "status": 400,
+                "success": False,
+                "message": "Token expired."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except jwt.InvalidTokenError:
+            return Response({
+                "status": 400,
+                "success": False,
+                "message": "Invalid token."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete used token
-        cache.delete(reset_token)
+        serializer = ForgotPasswordResetSerializer(data=request.data)
+        if serializer.is_valid():
+            new_password = serializer.validated_data['new_password']
 
+            try:
+                user = CustomUser.objects.get(id=user_id)
+            except CustomUser.DoesNotExist:
+                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            #  Reset password
+            user.set_password(new_password)
+            user.save()
+
+            # Clear token from cache (invalidate)
+            cache.delete(f"password_reset_token_{token}")
+
+            return Response({
+                "status": 200,
+                "success": True,
+                "message": "Password reset successful."
+            }, status=status.HTTP_200_OK)
+        
         return Response({
-            "status": 200,
-            "success": True,
-            "message": "Password reset successful."
-        }, status=status.HTTP_200_OK)
+            "status": 400,
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 #change password
 
