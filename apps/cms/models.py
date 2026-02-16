@@ -19,7 +19,8 @@ class InfoSection(models.Model):
         ('support_user',   'Support & Safety User'),
         ('privacy',        'Privacy Policy'),         # ← new
         ('data_usage',     'Data Usage Overview'),    # ← new
-        ('deletion_faq', 'Data Deletion FAQ')       # optional
+        ('deletion_faq', 'Data Deletion FAQ'),       # optional
+        ('deletion_request', 'Data Deletion Request'), # ← new for API
     )
 
     page = models.CharField(

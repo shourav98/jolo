@@ -58,3 +58,55 @@ def request_data_deletion(request):
         'form': form,
         'page_title': 'Request Data Deletion'
     })
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from .serializers import InfoSectionSerializer, DataDeletionRequestSerializer
+
+class DataDeletionAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """
+        Fetch content for the Data Deletion Request page.
+        """
+        sections = InfoSection.objects.filter(page='deletion_request', is_active=True).order_by('order')
+        serializer = InfoSectionSerializer(sections, many=True)
+        return Response({
+            "status": 200,
+            "success": True,
+            "message": "Data deletion page content fetched successfully.",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """
+        Submit a data deletion request.
+        """
+        serializer = DataDeletionRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            extra_data = {}
+            if request.user.is_authenticated:
+                extra_data['user'] = request.user
+                extra_data['email'] = request.user.email
+            
+            deletion_request = serializer.save(**extra_data)
+            
+            return Response({
+                "status": 201,
+                "success": True,
+                "message": "Your data deletion request has been submitted successfully.",
+                "data": DataDeletionRequestSerializer(deletion_request).data
+            }, status=status.HTTP_201_CREATED)
+
+        
+        return Response({
+            "status": 400,
+            "success": False,
+            "message": "Invalid data submitted.",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
