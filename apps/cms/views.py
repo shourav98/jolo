@@ -5,6 +5,13 @@ from .forms import DataDeletionRequestForm
 from django.contrib import messages
 from django.shortcuts import redirect
 
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from .serializers import InfoSectionSerializer, DataDeletionRequestSerializer
+
 def legal_page(request):
     sections = InfoSection.objects.filter(page='legal', is_active=True)
     return render(request, 'pages/legal.html', {'sections': sections})
@@ -59,15 +66,8 @@ def request_data_deletion(request):
         'page_title': 'Request Data Deletion'
     })
 
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.permissions import AllowAny
-from .serializers import InfoSectionSerializer, DataDeletionRequestSerializer
-
 class DataDeletionAPIView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """
@@ -91,7 +91,6 @@ class DataDeletionAPIView(APIView):
             extra_data = {}
             if request.user.is_authenticated:
                 extra_data['user'] = request.user
-                extra_data['email'] = request.user.email
             
             deletion_request = serializer.save(**extra_data)
             

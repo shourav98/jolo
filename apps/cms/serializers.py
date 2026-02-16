@@ -9,7 +9,7 @@ class InfoSectionSerializer(serializers.ModelSerializer):
 class DataDeletionRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = DataDeletionRequest
-        fields = ['id', 'user', 'email', 'reason', 'status', 'created_at']
+        fields = ['id', 'user',  'reason', 'status', 'created_at']
         read_only_fields = ['id', 'user', 'status', 'created_at']
 
     def create(self, validated_data):
