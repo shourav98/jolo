@@ -17,7 +17,7 @@ def create_related_records(sender, instance, created, **kwargs):
         # Creator profile (default tier)
         CreatorProfile.objects.get_or_create(user=instance)
 
-
+# update code here when conflict
 @receiver(post_delete, sender=CreatorProfile)
 def unset_creator_flag(sender, instance, **kwargs):
     
