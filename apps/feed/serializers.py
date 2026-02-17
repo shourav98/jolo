@@ -33,6 +33,7 @@ class FeedSerializer(serializers.ModelSerializer):
     is_muted = serializers.SerializerMethodField()
     is_author_blocked = serializers.SerializerMethodField()
     is_creator = serializers.BooleanField(source="profile.is_creator", read_only=True)
+    is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = Feed
@@ -41,6 +42,7 @@ class FeedSerializer(serializers.ModelSerializer):
             "author_id",
             "author_name",
             "author_photo",
+            "is_owner",
             "is_creator",
             "content",
             "status",
@@ -108,7 +110,14 @@ class FeedSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             return False
         from apps.feed.models import BlockedUser
+        from apps.feed.models import BlockedUser
         return BlockedUser.objects.filter(blocker=user.profile, blocked=obj.profile).exists()
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.profile.user == request.user
+        return False
 
 
 
