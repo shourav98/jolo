@@ -50,8 +50,6 @@ class Feed(models.Model):
         if not user or not user.is_authenticated:
             return False
         vp = user.profile
-        if vp.id == self.profile_id:
-            return True
         return Unlock.objects.filter(fan=vp, feed=self).exists()
 
     def is_visible_to(self, user):

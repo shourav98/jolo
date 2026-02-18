@@ -61,6 +61,7 @@ class FeedListCreateView(APIView):
 
             feeds = Feed.objects.filter(
                 models.Q(status="public")
+                | models.Q(status="locked")
                 | models.Q(profile=profile)
                 | models.Q(status="followers", profile__in=following_profiles)
             ).exclude(
@@ -434,14 +435,10 @@ class UnlockFeed(APIView):
         return api_response(
             message="Feed unlocked successfully.",
             data={
-                "feed": {
-                    "id": feed.id,
-                    "unlock_price": feed.unlock_price,
-                    "total_view": feed.total_view
-                },
+                "feed": FeedSerializer(feed, context={"request": request}).data,
                 "fan": {
                     "id": fan.id,
-                    "remaining_coins": fan.coins
+                    "remaining_coins": fan.wallet.balance
                 }
             }
         )

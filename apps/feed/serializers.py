@@ -86,13 +86,16 @@ class FeedSerializer(serializers.ModelSerializer):
     def get_is_unlocked(self, obj):
         request = self.context.get("request")
         user = getattr(request, "user", None)
+        if obj.status != "locked":
+            # Public or followers-only posts are always considered "unlocked"
+            return True
         if not user or not user.is_authenticated:
-            return obj.status != "locked"
+            return False
+        # Owner always has access to their own locked post (no payment required)
         if hasattr(user, "profile") and user.profile.id == obj.profile_id:
             return True
-        if obj.status == "locked":
-            return obj.is_unlocked_for(user)
-        return True
+        # Other users: only unlocked after payment (Unlock record exists)
+        return obj.is_unlocked_for(user)
 
     def get_is_muted(self, obj):
         """Check if current user has muted this post"""
