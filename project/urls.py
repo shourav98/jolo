@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/", include("apps.monetization.urls")),
     path("api/", include("apps.messaging.urls")),
     path("api/notifications/", include("apps.notification.urls")),
+    path("api/moderate/", include("apps.moderation.urls")),
     path('ckeditor5/', include('django_ckeditor_5.urls')),
     # path("api/", include("apps.chatting_app.urls")),
      path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

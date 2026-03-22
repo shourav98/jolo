@@ -8,6 +8,7 @@ from datetime import timedelta
 from django.utils import timezone
 from apps.monetization.models import CreatorTier
 from django.contrib.contenttypes.models import ContentType
+import threading
 
 
 
@@ -125,6 +126,35 @@ class FeedListCreateView(APIView):
                 file_public_id=cloudinary_result['public_id'],
                 file_type="video"
             )
+
+        # ─── 🛡️ AI Content Moderation (Facebook-style) ───
+        # Run AFTER all file uploads so visual scan sees the actual media.
+        # We run it in a thread to avoid slowing down the API response.
+        def run_moderation(feed_id):
+            import time
+            from apps.feed.models import Feed as FeedModel, FeedFile
+            import logging
+            
+            logger = logging.getLogger(__name__)
+            
+            # Wait a moment to ensure SQLite has fully committed the FeedFiles from the main thread
+            time.sleep(2)
+            
+            try:
+                from apps.moderation.services import moderate_feed_after_upload
+                # Re-fetch feed fresh
+                feed_obj = FeedModel.objects.filter(id=feed_id).first()
+                if feed_obj:
+                    # Log to verify we can see the files
+                    file_count = FeedFile.objects.filter(feed=feed_obj).count()
+                    logger.info(f"[Moderation] Thread starting for Feed #{feed_id}. Found {file_count} FeedFile(s).")
+                    
+                    moderate_feed_after_upload(feed_obj)
+            except Exception as e:
+                logger.error(f"[Moderation thread] error: {e}")
+
+        threading.Thread(target=run_moderation, args=(feed.id,), daemon=True).start()
+        # ─────────────────────────────────────────────────────
 
         return api_response(
             message="Feed created successfully.",

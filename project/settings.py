@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'apps.monetization.apps.MonetizationConfig',
     'apps.notification.apps.NotificationConfig',
     'apps.cms.apps.CmsConfig',
+    'apps.moderation.apps.ModerationConfig',
 ]
 
 MIDDLEWARE = [
@@ -246,6 +247,11 @@ CACHES = {
 }
 
 
+
+###################################
+#   HIVE AI CONTENT MODERATION
+###################################
+HIVE_API_KEY = os.getenv("HIVE_API_KEY", "")
 
 #stripe
 
