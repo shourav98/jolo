@@ -85,7 +85,7 @@ class CreatorMonetizationAdmin(ModelAdmin):
         ("Verification Files", {
             "fields": ("id_proof_link", "id_proof", "intro_video_link", "intro_video")
         }),
-        ("Payout Account Info", {
+        ("Stripe Payout Account Info", {
             "fields": ("payout_info",)
         }),
     )
@@ -109,24 +109,26 @@ class CreatorMonetizationAdmin(ModelAdmin):
         return "—"
     intro_video_link.short_description = "Intro Video (View)"
 
-    # Read-only payout info (display all linked accounts)
+    # Read-only payout info (display Stripe connected accounts)
     def payout_info(self, obj):
         accounts = PayoutAccount.objects.filter(user=obj.user)
         if not accounts.exists():
-            return "No payout accounts found."
+            return "No Stripe payout accounts connected."
         html = "<ul style='margin:0;padding-left:20px;'>"
         for acc in accounts:
             url = f"/admin/monetization/payoutaccount/{acc.id}/change/"
+            status = "✅ Onboarded" if acc.onboarding_complete else "⏳ Pending Onboarding"
+            default_badge = " 🔹 Default" if acc.is_default else ""
             html += (
                 f"<li><a href='{url}' target='_blank'>"
-                f"<strong>{acc.bank_name}</strong></a> — {acc.account_holder_name} "
-                f"(<code>{acc.account_number}</code>) "
-                f"{'Default' if acc.is_default else ''}</li>"
+                f"<strong>{acc.stripe_account_id}</strong></a> — "
+                f"{acc.account_name or 'No Label'} "
+                f"({status}){default_badge}</li>"
             )
         html += "</ul>"
         return format_html(html)
 
-    payout_info.short_description = "Linked Payout Accounts"
+    payout_info.short_description = "Linked Stripe Payout Accounts"
 
 
 # ---------------- CREATOR PROFILE ----------------
@@ -139,13 +141,13 @@ class CreatorProfileAdmin(ModelAdmin):
     list_per_page = 50
 
 
-# ---------------- PAYOUT ACCOUNT ----------------
+# ---------------- PAYOUT ACCOUNT (Stripe) ----------------
 @admin.register(PayoutAccount)
 class PayoutAccountAdmin(ModelAdmin):
-    list_display = ("user", "bank_name", "account_holder_name", "account_number", "is_default", "created_at")
-    list_filter = ("is_default", "created_at")
-    search_fields = ("user__name", "bank_name", "account_holder_name")
-    readonly_fields = ("created_at",)
+    list_display = ("user", "stripe_account_id", "account_name", "onboarding_complete", "is_default", "created_at")
+    list_filter = ("is_default", "onboarding_complete", "created_at")
+    search_fields = ("user__name", "stripe_account_id", "account_name")
+    readonly_fields = ("created_at", "stripe_account_id")
     list_per_page = 30
 
 
@@ -162,7 +164,7 @@ def reject_selected(modeladmin, request, queryset):
     for pr in queryset:
         msg = (
             f"❌ Your payout request of ${pr.amount_usd} has been rejected. "
-            "Please check your bank details or contact support."
+            "Please check your Stripe account or contact support."
         )
         phone = getattr(pr.user, "phone", None)
         if phone:
@@ -176,9 +178,9 @@ def reject_selected(modeladmin, request, queryset):
 
 @admin.register(PayoutRequest)
 class PayoutRequestAdmin(ModelAdmin):
-    list_display = ("user", "amount_usd", "status", "account", "created_at", "processed_at")
+    list_display = ("user", "amount_usd", "status", "stripe_transfer_id", "account", "created_at", "processed_at")
     list_filter = ("status", "created_at")
-    search_fields = ("user__name", "user__phone")
+    search_fields = ("user__name", "user__phone", "stripe_transfer_id")
     ordering = ("-created_at",)
     actions = [mark_as_paid, reject_selected]
     date_hierarchy = "created_at"

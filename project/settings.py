@@ -282,6 +282,10 @@ cloudinary.config(
 )
 STRIPE_CANCEL_URL = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/payment/cancel")
 
+# Stripe Connect (payouts)
+STRIPE_CONNECT_REFRESH_URL = os.getenv("STRIPE_CONNECT_REFRESH_URL", "http://localhost:8000/api/stripe/connect/refresh/")
+STRIPE_CONNECT_RETURN_URL = os.getenv("STRIPE_CONNECT_RETURN_URL", "http://localhost:8000/api/stripe/connect/callback/")
+
 
 CKEDITOR_5_CONFIGS = {
     'extends': {

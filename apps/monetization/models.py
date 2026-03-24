@@ -244,13 +244,13 @@ class CreatorProfile(models.Model):
 
 class PayoutAccount(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="payout_accounts")
-    bank_name = models.CharField(max_length=100)
-    account_holder_name = models.CharField(max_length=100)
-    account_number = models.CharField(max_length=64)
+    stripe_account_id = models.CharField(max_length=64, unique=True)
+    onboarding_complete = models.BooleanField(default=False)
+    account_name = models.CharField(max_length=100, blank=True, default="")
     is_default = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta: ordering = ["-is_default","-created_at"]
-    def __str__(self): return f"{self.bank_name} • {self.account_holder_name}"
+    def __str__(self): return f"Stripe {self.stripe_account_id} • {self.account_name or self.user.name}"
 
 class PayoutRequest(models.Model):
     STATUS = (("pending","Pending"),("processing","Processing"),("paid","Paid"),("rejected","Rejected"))
@@ -260,6 +260,7 @@ class PayoutRequest(models.Model):
     account = models.ForeignKey(PayoutAccount, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
+    stripe_transfer_id = models.CharField(max_length=128, blank=True, null=True)
     def __str__(self): return f"{self.user.name} • ${self.amount_usd} • {self.status}"
 
 class SpendEvent(models.Model):

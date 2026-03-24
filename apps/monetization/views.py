@@ -27,6 +27,9 @@ from apps.feed.models import TopFan
 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 # -----------------------
 # Unified API Response
@@ -116,44 +119,14 @@ class MonetizationApply(APIView):
 
         monet.save(update_fields=["id_proof", "intro_video", "id_proof_public_id", "intro_video_public_id"])
 
-        # Handle payout account
-        bank_name = request.data.get("bank_name")
-        account_holder_name = request.data.get("account_holder_name")
-        account_number = request.data.get("account_number")
-
-        # Try default first, else any existing account
-        default_account = (
-            PayoutAccount.objects.filter(user=user, is_default=True).first()
-            or PayoutAccount.objects.filter(user=user).first()
-        )
-
-        # If no account exists at all and no details provided → block
-        if not default_account and not all([bank_name, account_holder_name, account_number]):
-            return api_response(
-                success=False,
-                message="Bank account details are required before applying for monetization.",
-                status_code=400
-            )
-
-        # If details provided and no account yet → create one and make default
-        if not default_account and all([bank_name, account_holder_name, account_number]):
-            default_account = PayoutAccount.objects.create(
-                user=user,
-                bank_name=bank_name,
-                account_holder_name=account_holder_name,
-                account_number=account_number,
-                is_default=True,
-            )
-            PayoutAccount.objects.filter(user=user).exclude(id=default_account.id).update(is_default=False)
-
-        # Mark monetization as pending
+        # Mark monetization as pending (Stripe payout account can be added later)
         monet.status = MonetizationStatus.PENDING
         monet.applied_at = timezone.now()
         monet.save(update_fields=["status", "applied_at"])
 
         return api_response(
             success=True,
-            message="Monetization application submitted successfully.",
+            message="Monetization application submitted successfully. You can connect your Stripe account later.",
             data={"status": monet.status, "applied_at": monet.applied_at},
             status_code=201
         )
@@ -458,55 +431,17 @@ def stripe_webhook(request):
 
     return HttpResponse(status=200)
 
-# -----------------------
-# Creator + Payout
-# -----------------------
-class PayoutEligibility(APIView):
-    permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        if not can_earn(request.user):
-            return api_response(data={"can_request": False, "reason": "Not monetized"})
-        usd = Decimal(request.user.wallet.balance) * COIN_VALUE_USD
-        return api_response(data={
-            "balance_coins": request.user.wallet.balance,
-            "balance_usd": f"{usd:.2f}",
-            "threshold_usd": f"{MIN_PAYOUT_USD:.2f}",
-            "can_request": usd >= MIN_PAYOUT_USD
-        })
+# =========================================================
+# Stripe Connect — Payout Accounts (replaces bank accounts)
+# =========================================================
 
-
-class RequestPayout(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        if not can_earn(request.user):
-            return api_response(success=False, message="Not monetized.", status_code=403)
-
-        account_id = request.data.get("account_id")
-        if not account_id:
-            return api_response(success=False, message="account_id required.", status_code=400)
-
-        try:
-            account = PayoutAccount.objects.get(id=account_id, user=request.user)
-        except PayoutAccount.DoesNotExist:
-            return api_response(success=False, message="Invalid account.", status_code=404)
-
-        usd = Decimal(request.user.wallet.balance) * COIN_VALUE_USD
-        if usd < MIN_PAYOUT_USD:
-            return api_response(success=False, message="Minimum $50 required.", status_code=400)
-
-        req = PayoutRequest.objects.create(user=request.user, amount_usd=usd, account=account)
-        request.user.wallet.balance = 0
-        request.user.wallet.save(update_fields=["balance"])
-        return api_response(message="Payout requested successfully.", data=PayoutRequestSerializer(req).data, status_code=201)
-
-
-# -----------------------
-# Payout Accounts CRUD
-# -----------------------
 class PayoutAccountListCreate(APIView):
-   
+    """
+    GET  → List creator's connected Stripe accounts.
+    POST → Create a Stripe Connect Express account and return onboarding URL.
+           Body (optional): { "account_name": "My Main Account" }
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -514,43 +449,99 @@ class PayoutAccountListCreate(APIView):
         return api_response(data=PayoutAccountSerializer(accounts, many=True).data)
 
     def post(self, request):
-        # Prevent exact duplicates
-        bank_name = request.data.get("bank_name")
-        account_number = request.data.get("account_number")
-        existing = PayoutAccount.objects.filter(
-            user=request.user,
-            bank_name=bank_name,
-            account_number=account_number,
-        ).first()
-        if existing:
-            return api_response(
-                success=True,
-                message="Payout account already exists.",
-                data=PayoutAccountSerializer(existing).data,
-                status_code=200,
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        account_name = request.data.get("account_name", "")
+
+        try:
+            # 1️⃣ Create Stripe Connect Express account
+            acct = stripe.Account.create(
+                type="express",
+                country="US",
+                email=getattr(request.user, "email", None) or None,
+                capabilities={
+                    "card_payments": {"requested": True},
+                    "transfers": {"requested": True},
+                },
+                metadata={"user_id": str(request.user.id)},
             )
 
-        ser = PayoutAccountSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        acc = ser.save(user=request.user)
+            # 2️⃣ Save locally
+            payout_account = PayoutAccount.objects.create(
+                user=request.user,
+                stripe_account_id=acct.id,
+                account_name=account_name,
+                onboarding_complete=False,
+            )
 
-        # Auto-default if it's the first account; otherwise honor client default
-        others = request.user.payout_accounts.exclude(id=acc.id)
-        if not others.exists():
-            acc.is_default = True
-            acc.save(update_fields=["is_default"])
-        elif acc.is_default:
-            others.update(is_default=False)
+            # Auto-default if first account
+            others = request.user.payout_accounts.exclude(id=payout_account.id)
+            if not others.exists():
+                payout_account.is_default = True
+                payout_account.save(update_fields=["is_default"])
 
+            # 3️⃣ Generate onboarding link
+            account_link = stripe.AccountLink.create(
+                account=acct.id,
+                refresh_url=settings.STRIPE_CONNECT_REFRESH_URL,
+                return_url=settings.STRIPE_CONNECT_RETURN_URL,
+                type="account_onboarding",
+            )
+
+            return api_response(
+                message="Stripe Connect account created. Complete onboarding using the URL.",
+                data={
+                    "account": PayoutAccountSerializer(payout_account).data,
+                    "onboarding_url": account_link.url,
+                },
+                status_code=201,
+            )
+
+        except stripe.StripeError as e:
+            logger.error(f"Stripe Connect error: {e}")
+            return api_response(
+                success=False,
+                message=f"Stripe error: {str(e)}",
+                status_code=400,
+            )
+
+
+class StripeConnectCallback(APIView):
+    """
+    GET → Called after creator completes Stripe onboarding.
+          Checks account status and marks onboarding_complete.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+
+        # Find user's payout accounts that haven't completed onboarding
+        accounts = request.user.payout_accounts.filter(onboarding_complete=False)
+        updated = []
+
+        for payout_acc in accounts:
+            try:
+                acct = stripe.Account.retrieve(payout_acc.stripe_account_id)
+                if acct.charges_enabled or acct.payouts_enabled or acct.details_submitted:
+                    payout_acc.onboarding_complete = True
+                    payout_acc.save(update_fields=["onboarding_complete"])
+                    updated.append(payout_acc.stripe_account_id)
+            except stripe.StripeError as e:
+                logger.warning(f"Could not verify Stripe account {payout_acc.stripe_account_id}: {e}")
+
+        if updated:
+            return api_response(
+                message="Stripe onboarding verified successfully.",
+                data={"verified_accounts": updated},
+            )
         return api_response(
-            message="Payout account created successfully.",
-            data=PayoutAccountSerializer(acc).data,
-            status_code=201
+            success=False,
+            message="No accounts were verified. Please complete Stripe onboarding first.",
+            status_code=400,
         )
 
 
 class PayoutAccountSetDefault(APIView):
-    
     permission_classes = [IsAuthenticated]
 
     def post(self, request, account_id):
@@ -569,3 +560,126 @@ class PayoutAccountSetDefault(APIView):
             data=PayoutAccountSerializer(account).data,
             status_code=200,
         )
+
+
+# -----------------------
+# Creator Payout Eligibility & Request (Stripe Transfer)
+# -----------------------
+class PayoutEligibility(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not can_earn(request.user):
+            return api_response(data={"can_request": False, "reason": "Not monetized"})
+        usd = Decimal(request.user.wallet.balance) * COIN_VALUE_USD
+
+        # Check if user has a completed Stripe account
+        has_stripe = request.user.payout_accounts.filter(onboarding_complete=True).exists()
+
+        return api_response(data={
+            "balance_coins": request.user.wallet.balance,
+            "balance_usd": f"{usd:.2f}",
+            "threshold_usd": f"{MIN_PAYOUT_USD:.2f}",
+            "can_request": usd >= MIN_PAYOUT_USD and has_stripe,
+            "has_stripe_account": has_stripe,
+        })
+
+
+class RequestPayout(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not can_earn(request.user):
+            return api_response(success=False, message="Not monetized.", status_code=403)
+
+        account_id = request.data.get("account_id")
+        if not account_id:
+            return api_response(success=False, message="account_id required.", status_code=400)
+
+        # 💲 Get the amount of USD the user wants to withdraw
+        withdraw_usd = request.data.get("withdraw_usd")
+        if not withdraw_usd:
+            return api_response(success=False, message="withdraw_usd required.", status_code=400)
+        
+        try:
+            withdraw_usd = Decimal(str(withdraw_usd))
+            if withdraw_usd <= 0:
+                raise ValueError
+        except Exception:
+            return api_response(success=False, message="withdraw_usd must be a valid positive number.", status_code=400)
+
+        if withdraw_usd < MIN_PAYOUT_USD:
+            return api_response(
+                success=False, 
+                message=f"Minimum withdrawal is ${MIN_PAYOUT_USD}.", 
+                status_code=400
+            )
+
+        try:
+            account = PayoutAccount.objects.get(id=account_id, user=request.user)
+        except PayoutAccount.DoesNotExist:
+            return api_response(success=False, message="Invalid account.", status_code=404)
+
+        # Ensure Stripe onboarding is complete
+        if not account.onboarding_complete:
+            return api_response(
+                success=False,
+                message="Please complete Stripe onboarding before requesting a payout.",
+                status_code=400,
+            )
+
+        # Calculate equivalent coins (ceiling division to ensure enough coins are taken for the USD requested)
+        import math
+        coins_to_withdraw = int(math.ceil(withdraw_usd / COIN_VALUE_USD))
+
+        # Check if they have enough coins in their wallet
+        if request.user.wallet.balance < coins_to_withdraw:
+            return api_response(
+                success=False, 
+                message=f"Insufficient balance. You need {coins_to_withdraw} coins for ${withdraw_usd:.2f}, but you only have {request.user.wallet.balance} coins.", 
+                status_code=400
+            )
+
+        # We will transfer the EXACT usd requested
+        usd = withdraw_usd
+
+        # Create Stripe Transfer
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            transfer = stripe.Transfer.create(
+                amount=int(usd * 100),  # Stripe uses cents
+                currency="usd",
+                destination=account.stripe_account_id,
+                description=f"Payout of {coins_to_withdraw} coins for {request.user.name} (user_id={request.user.id})",
+                metadata={
+                    "user_id": str(request.user.id),
+                    "payout_account_id": str(account.id),
+                    "coins_withdrawn": str(coins_to_withdraw),
+                },
+            )
+
+            req = PayoutRequest.objects.create(
+                user=request.user,
+                amount_usd=usd,
+                account=account,
+                status="processing",
+                stripe_transfer_id=transfer.id,
+            )
+
+            # Deduct ONLY the requested coins from the creator's wallet balance
+            request.user.wallet.balance -= coins_to_withdraw
+            request.user.wallet.save(update_fields=["balance"])
+
+            return api_response(
+                message=f"Payout of {coins_to_withdraw} coins (${usd:.2f}) requested successfully.",
+                data=PayoutRequestSerializer(req).data,
+                status_code=201,
+            )
+
+        except stripe.StripeError as e:
+            logger.error(f"Stripe Transfer error for user {request.user.id}: {e}")
+            return api_response(
+                success=False,
+                message=f"Stripe transfer failed: {str(e)}",
+                status_code=400,
+            )

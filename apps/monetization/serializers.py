@@ -14,12 +14,13 @@ class CoinPurchaseSerializer(serializers.ModelSerializer):
 class PayoutAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayoutAccount
-        fields = ("id","bank_name","account_holder_name","account_number","is_default","created_at")
+        fields = ("id","stripe_account_id","onboarding_complete","account_name","is_default","created_at")
+        read_only_fields = ("id","stripe_account_id","onboarding_complete","created_at")
 
 class PayoutRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayoutRequest
-        fields = ("id","amount_usd","status","created_at","processed_at","account")
+        fields = ("id","amount_usd","status","created_at","processed_at","account","stripe_transfer_id")
 
 class MonetizationStatusSerializer(serializers.ModelSerializer):
     class Meta:
