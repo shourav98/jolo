@@ -622,11 +622,26 @@ class RequestPayout(APIView):
 
         # Ensure Stripe onboarding is complete
         if not account.onboarding_complete:
-            return api_response(
-                success=False,
-                message="Please complete Stripe onboarding before requesting a payout.",
-                status_code=400,
-            )
+            # Fallback: Check Stripe API directly just in case the callback was missed
+            stripe.api_key = settings.STRIPE_SECRET_KEY
+            try:
+                acct = stripe.Account.retrieve(account.stripe_account_id)
+                if acct.charges_enabled or acct.payouts_enabled or acct.details_submitted:
+                    account.onboarding_complete = True
+                    account.save(update_fields=["onboarding_complete"])
+                else:
+                    return api_response(
+                        success=False,
+                        message="Please complete Stripe onboarding before requesting a payout.",
+                        status_code=400,
+                    )
+            except stripe.StripeError as e:
+                logger.warning(f"Failed to fetch Stripe account {account.stripe_account_id}: {e}")
+                return api_response(
+                    success=False,
+                    message="Could not verify Stripe account status. Please try again.",
+                    status_code=400,
+                )
 
         # Calculate equivalent coins (ceiling division to ensure enough coins are taken for the USD requested)
         import math
